@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Torre de Control — Arce Hnos.</title>
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+  :root {
+
+    --azul:#0D2B4E;--azul-med:#1A4E7C;--azul-claro:#2E75B6;--azul-faint:#EBF3FB;
+
+    --verde:#1A7A4A;--verde-bg:#D4EDDA;--amarillo:#B8860B;--amarillo-bg:#FFF3CD;
+
+    --rojo:#C0392B;--rojo-bg:#FDECEA;--gris:#6B7280;--gris-bg:#F3F4F6;
+
+    --borde:#D1D5DB;--bg:#F0F4F8;--blanco:#FFFFFF;--texto:#1F2937;
+
+    --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+
+  body{font-family:var(--sans);background:var(--bg);color:var(--texto);min-height:100vh;font-size:13px;}
+
+
+
+  /* HEADER */
+
+  .header{background:var(--azul);color:#fff;padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;border-bottom:3px solid var(--azul-claro);}
+
+  .header-brand{display:flex;align-items:center;gap:14px;}
+
+  .header-logo{width:36px;height:36px;background:var(--azul-claro);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:600;font-size:14px;color:#fff;}
+
+  .header-title{font-size:15px;font-weight:600;}
+
+  .header-sub{font-size:11px;color:#93B8D8;font-family:var(--mono);}
+
+  .header-right{display:flex;align-items:center;gap:14px;}
+
+  .header-date{font-family:var(--mono);font-size:11px;color:#93B8D8;}
+
+  .sync-btn{padding:5px 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#fff;font-family:var(--sans);font-size:11px;cursor:pointer;transition:background .2s;}
+
+  .sync-btn:hover{background:rgba(255,255,255,.2);}
+
+  .sync-indicator{display:flex;align-items:center;gap:6px;font-size:10px;font-family:var(--mono);color:#93B8D8;}
+
+  .sync-dot{width:6px;height:6px;border-radius:50%;background:#4ADE80;animation:pulse 2s infinite;}
+
+  .sync-dot.loading{background:#F59E0B;animation:spin 1s linear infinite;}
+
+  .sync-dot.error{background:#EF4444;animation:none;}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  @keyframes spin{to{transform:rotate(360deg);border-radius:0}}
+
+
+
+  /* CONFIG BANNER */
+
+  .config-banner{background:linear-gradient(135deg,#1A4E7C,#0D2B4E);color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--azul-claro);}
+
+  .config-banner.hidden{display:none;}
+
+  .config-msg{font-size:13px;}
+
+  .config-msg strong{font-size:14px;display:block;margin-bottom:4px;}
+
+  .config-input{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:7px 12px;color:#fff;font-family:var(--mono);font-size:11px;width:540px;outline:none;}
+
+  .config-input::placeholder{color:rgba(255,255,255,.5);}
+
+  .config-input:focus{border-color:#4FC3F7;background:rgba(255,255,255,.15);}
+
+  .config-save{padding:7px 16px;background:#4FC3F7;border:none;border-radius:6px;font-family:var(--sans);font-weight:600;font-size:12px;cursor:pointer;color:#0D2B4E;transition:background .15s;}
+
+  .config-save:hover{background:#81D4FA;}
+
+
+
+  /* TABS */
+
+  .tabs{background:var(--azul-med);display:flex;padding:0 28px;}
+
+  .tab-btn{padding:10px 18px;background:none;border:none;color:#93B8D8;font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;}
+
+  .tab-btn:hover{color:#fff;}
+
+  .tab-btn.active{color:#fff;border-bottom-color:#4FC3F7;}
+
+
+
+  .main{padding:24px 28px;max-width:1400px;margin:0 auto;}
+
+  .tab-content{display:none;}
+
+  .tab-content.active{display:block;}
+
+
+
+  /* KPI */
+
+  .kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+
+  .kpi-card{background:var(--blanco);border-radius:10px;padding:16px 18px;border:1px solid var(--borde);border-left:4px solid var(--azul-claro);}
+
+  .kpi-card.verde{border-left-color:var(--verde);}
+
+  .kpi-card.amarillo{border-left-color:var(--amarillo);}
+
+  .kpi-card.rojo{border-left-color:var(--rojo);}
+
+  .kpi-card.azul{border-left-color:var(--azul-claro);}
+
+  .kpi-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--gris);margin-bottom:8px;}
+
+  .kpi-valor{font-size:32px;font-weight:700;font-family:var(--mono);line-height:1;}
+
+  .kpi-card.verde .kpi-valor{color:var(--verde);}
+
+  .kpi-card.amarillo .kpi-valor{color:var(--amarillo);}
+
+  .kpi-card.rojo .kpi-valor{color:var(--rojo);}
+
+  .kpi-card.azul .kpi-valor{color:var(--azul-claro);}
+
+  .kpi-sub{font-size:10px;color:var(--gris);margin-top:4px;}
+
+
+
+  /* SECTION */
+
+  .section{background:var(--blanco);border-radius:10px;border:1px solid var(--borde);margin-bottom:20px;overflow:hidden;}
+
+  .section-head{padding:14px 20px;border-bottom:1px solid var(--borde);display:flex;align-items:center;justify-content:space-between;background:#FAFBFC;}
+
+  .section-title{font-size:13px;font-weight:600;color:var(--azul);}
+
+
+
+  /* CHARTS ROW */
+
+  .charts-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;}
+
+  .chart-box{background:var(--blanco);border-radius:10px;border:1px solid var(--borde);padding:16px 18px;}
+
+  .chart-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);margin-bottom:14px;}
+
+
+
+  /* FILTERS */
+
+  .filters{padding:12px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--borde);background:#FAFBFC;}
+
+  .filter-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);}
+
+  .filter-btn{padding:4px 12px;border-radius:20px;border:1px solid var(--borde);background:var(--blanco);font-size:11px;cursor:pointer;font-family:var(--sans);transition:all .15s;font-weight:500;}
+
+  .filter-btn:hover,.filter-btn.active{background:var(--azul);color:#fff;border-color:var(--azul);}
+
+  .filter-btn.f-rojo.active{background:var(--rojo);border-color:var(--rojo);}
+
+  .filter-btn.f-amarillo.active{background:var(--amarillo);border-color:var(--amarillo);}
+
+  .filter-btn.f-verde.active{background:var(--verde);border-color:var(--verde);}
+
+  .search-input{padding:5px 12px;border:1px solid var(--borde);border-radius:6px;font-size:11px;font-family:var(--sans);width:180px;outline:none;margin-left:auto;}
+
+  .search-input:focus{border-color:var(--azul-claro);}
+
+
+
+  /* TABLE */
+
+  .table-wrap{overflow-x:auto;}
+
+  table{width:100%;border-collapse:collapse;}
+
+  thead th{background:var(--azul);color:#fff;padding:9px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;white-space:nowrap;cursor:pointer;user-select:none;}
+
+  thead th:hover{background:var(--azul-med);}
+
+  tbody tr{border-bottom:1px solid #F3F4F6;transition:background .1s;}
+
+  tbody tr:hover{background:var(--azul-faint);}
+
+  tbody td{padding:9px 12px;font-size:12px;}
+
+
+
+  /* BADGES */
+
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
+
+  .badge.ok{background:var(--verde-bg);color:var(--verde);}
+
+  .badge.alerta{background:var(--amarillo-bg);color:var(--amarillo);}
+
+  .badge.vencido{background:var(--rojo-bg);color:var(--rojo);}
+
+  .badge.na{background:var(--gris-bg);color:var(--gris);}
+
+
+
+  /* DONUT */
+
+  .donut-row{display:flex;align-items:center;gap:16px;}
+
+  .donut-legend{flex:1;}
+
+  .legend-item{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+
+  .legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+  .legend-label{font-size:11px;color:var(--texto);}
+
+  .legend-val{font-family:var(--mono);font-size:11px;font-weight:600;margin-left:auto;}
+
+
+
+  /* BARS */
+
+  .bar-chart{width:100%;}
+
+  .bar-row{display:flex;align-items:center;margin-bottom:10px;gap:8px;}
+
+  .bar-name{font-size:11px;width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .bar-track{flex:1;height:16px;background:#F3F4F6;border-radius:4px;overflow:hidden;}
+
+  .bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:10px;font-weight:600;color:#fff;transition:width .5s;}
+
+  .bar-num{font-family:var(--mono);font-size:10px;font-weight:600;width:24px;text-align:right;}
+
+
+
+  /* MES GRID */
+
+  .mes-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:16px 20px;}
+
+  .mes-card{border-radius:8px;padding:10px 12px;border:1px solid var(--borde);}
+
+  .mes-nombre{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gris);margin-bottom:6px;}
+
+  .mes-pct{font-size:24px;font-weight:700;font-family:var(--mono);}
+
+  .mes-card.bien{background:var(--verde-bg);border-color:#A3D9B4;}
+
+  .mes-card.bien .mes-pct{color:var(--verde);}
+
+  .mes-card.medio{background:var(--amarillo-bg);border-color:#F0D080;}
+
+  .mes-card.medio .mes-pct{color:var(--amarillo);}
+
+  .mes-card.mal{background:var(--rojo-bg);border-color:#F5B7B1;}
+
+  .mes-card.mal .mes-pct{color:var(--rojo);}
+
+
+
+  /* TIMELINE */
+
+  .timeline{padding:16px 20px;}
+
+  .tl-row{display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid #F3F4F6;}
+
+  .tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+  .tl-conductor{font-size:12px;font-weight:500;width:150px;flex-shrink:0;}
+
+  .tl-doc{font-size:11px;color:var(--gris);flex:1;}
+
+  .tl-fecha{font-family:var(--mono);font-size:10px;}
+
+
+
+  /* MODAL */
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;}
+
+  .modal-overlay.open{display:flex;}
+
+  .modal{background:var(--blanco);border-radius:12px;width:600px;max-width:95vw;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;}
+
+  .modal-title{font-size:16px;font-weight:700;color:var(--azul);}
+
+  .modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--gris);}
+
+  .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+  .modal-field label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--gris);display:block;margin-bottom:4px;}
+
+  .modal-field .val{font-size:13px;font-weight:500;}
+
+
+
+  .btn-export{padding:5px 14px;background:var(--azul-claro);color:#fff;border:none;border-radius:6px;font-size:11px;font-family:var(--sans);font-weight:600;cursor:pointer;transition:background .15s;}
+
+  .btn-export:hover{background:var(--azul);}
+
+  .empty{padding:32px;text-align:center;color:var(--gris);font-size:12px;}
+
+
+
+  /* LOADING */
+
+  .skeleton{background:linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px;height:16px;margin:4px 0;}
+
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+
+
+  @media(max-width:900px){.kpi-row{grid-template-columns:repeat(3,1fr)}.charts-row{grid-template-columns:1fr}.mes-grid{grid-template-columns:repeat(3,1fr)}}
+
+</style>
+
+</head>
+
+<body>
+
+
+
+<!-- HEADER -->
+
+<div class="header">
+
+  <div class="header-brand">
+
+    <div class="header-logo">AH</div>
+
+    <div>
+
+      <div class="header-title">Torre de Control — Arce Hnos.</div>
+
+      <div class="header-sub">Tablero de Cumplimiento YPF · CAS Arenas 2026</div>
+
+    </div>
+
+  </div>
+
+  <div class="header-right">
+
+    <div class="sync-indicator">
+
+      <div class="sync-dot" id="syncDot"></div>
+
+      <span id="syncLabel">Cargando...</span>
+
+    </div>
+
+    <button class="sync-btn" onclick="cargarDatos(true)">↻ Actualizar</button>
+
+    <div class="header-date" id="headerDate"></div>
+
+  </div>
+
+</div>
+
+
+
+<!-- CONFIG BANNER -->
+
+<div class="config-banner" id="configBanner">
+
+  <div class="config-msg">
+
+    <strong>⚙️ Configuración inicial requerida</strong>
+
+    Pegá la URL de la Web App del Google Sheet (obtenida después de ejecutar <code>publicarAPI</code>)
+
+  </div>
+
+  <div style="display:flex;gap:8px;align-items:center;flex:1;margin-left:24px">
+
+    <input class="config-input" id="apiInput" placeholder="https://script.google.com/macros/s/XXXX.../exec" />
+
+    <button class="config-save" onclick="guardarAPI()">Guardar y conectar</button>
+
+    <button class="config-save" style="background:rgba(255,255,255,.2);color:#fff" onclick="usarDemoLocal()">Ver demo local</button>
+
+  </div>
+
+</div>
+
+
+
+<!-- TABS -->
+
+<div class="tabs">
+
+  <button class="tab-btn active" onclick="showTab('resumen')">📊 Resumen</button>
+
+  <button class="tab-btn" onclick="showTab('conductores')">👤 Conductores</button>
+
+  <button class="tab-btn" onclick="showTab('flota')">🚛 Flota</button>
+
+  <button class="tab-btn" onclick="showTab('empresa')">🏢 Empresa</button>
+
+  <button class="tab-btn" onclick="showTab('vencimientos')">⏰ Vencimientos</button>
+
+</div>
+
+
+
+<div class="main">
+
+
+
+<!-- RESUMEN -->
+
+<div class="tab-content active" id="tab-resumen">
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="charts-row">
+
+    <div class="chart-box"><div class="chart-title">Cumplimiento — Conductores</div><div class="donut-row"><canvas id="donutCond" width="120" height="120"></canvas><div class="donut-legend" id="legCond"></div></div></div>
+
+    <div class="chart-box"><div class="chart-title">Cumplimiento — Flota</div><div class="donut-row"><canvas id="donutFlota" width="120" height="120"></canvas><div class="donut-legend" id="legFlota"></div></div></div>
+
+    <div class="chart-box"><div class="chart-title">ICM por Conductor (umbral 70)</div><div class="bar-chart" id="icmBars"></div></div>
+
+  </div>
+
+  <div class="section">
+
+    <div class="section-head"><div class="section-title">⚠️ Alertas Activas — Próximos 30 días</div><button class="btn-export" onclick="exportCSV('alertas')">Exportar CSV</button></div>
+
+    <div class="table-wrap"><table><thead><tr><th>Estado</th><th>Recurso</th><th>Tipo</th><th>Documento</th><th>Vence</th><th>Días</th></tr></thead><tbody id="tbAlertas"></tbody></table></div>
+
+  </div>
+
+  <div class="section">
+
+    <div class="section-head"><div class="section-title">📅 Historial Mensual de Cumplimiento</div></div>
+
+    <div class="mes-grid" id="mesGrid"></div>
+
+  </div>
+
+</div>
+
+
+
+<!-- CONDUCTORES -->
+
+<div class="tab-content" id="tab-conductores">
+
+  <div class="section">
+
+    <div class="section-head"><div class="section-title">Conductores — Documentación SRC</div><button class="btn-export" onclick="exportCSV('conductores')">Exportar CSV</button></div>
+
+    <div class="filters">
+
+      <span class="filter-label">Estado:</span>
+
+      <button class="filter-btn active" onclick="filtrar('condEst','todos',this)">Todos</button>
+
+      <button class="filter-btn f-rojo"     onclick="filtrar('condEst','VENCIDO',this)">🔴 Vencido</button>
+
+      <button class="filter-btn f-amarillo" onclick="filtrar('condEst','ALERTA',this)">🟡 Por vencer</button>
+
+      <button class="filter-btn f-verde"    onclick="filtrar('condEst','OK',this)">🟢 Al día</button>
+
+      <span class="filter-label" style="margin-left:8px">Tipo:</span>
+
+      <button class="filter-btn" onclick="filtrar('condTipo','todos',this)">Todos</button>
+
+      <button class="filter-btn" onclick="filtrar('condTipo','PROPIO',this)">Propios</button>
+
+      <button class="filter-btn" onclick="filtrar('condTipo','FLETERO',this)">Fleteros</button>
+
+      <input class="search-input" placeholder="🔍 Buscar..." oninput="setSearch('cond',this.value)">
+
+    </div>
+
+    <div class="table-wrap"><table><thead><tr>
+
+      <th onclick="setSort('cond','nombre')">Conductor ↕</th><th>Tipo</th>
+
+      <th onclick="setSort('cond','icm')">ICM ↕</th>
+
+      <th>LINTI</th><th>ART</th><th>Seg. Vida</th><th>Apto Méd.</th>
+
+      <th>EPP</th><th>Man. Def.</th><th>ARCA</th><th>Estado</th>
+
+    </tr></thead><tbody id="tbCond"></tbody></table></div>
+
+  </div>
+
+</div>
+
+
+
+<!-- FLOTA -->
+
+<div class="tab-content" id="tab-flota">
+
+  <div class="section">
+
+    <div class="section-head"><div class="section-title">Flota — Documentación SRC</div><button class="btn-export" onclick="exportCSV('flota')">Exportar CSV</button></div>
+
+    <div class="filters">
+
+      <span class="filter-label">Estado:</span>
+
+      <button class="filter-btn active" onclick="filtrar('flotaEst','todos',this)">Todos</button>
+
+      <button class="filter-btn f-rojo"     onclick="filtrar('flotaEst','VENCIDO',this)">🔴 Vencido</button>
+
+      <button class="filter-btn f-amarillo" onclick="filtrar('flotaEst','ALERTA',this)">🟡 Por vencer</button>
+
+      <button class="filter-btn f-verde"    onclick="filtrar('flotaEst','OK',this)">🟢 Al día</button>
+
+      <span class="filter-label" style="margin-left:8px">Tipo:</span>
+
+      <button class="filter-btn" onclick="filtrar('flotaTipo','todos',this)">Todos</button>
+
+      <button class="filter-btn" onclick="filtrar('flotaTipo','CAMION',this)">Camión</button>
+
+      <button class="filter-btn" onclick="filtrar('flotaTipo','SEMI',this)">Semi</button>
+
+      <button class="filter-btn" onclick="filtrar('flotaTipo','CAMIONETA',this)">Camioneta</button>
+
+      <input class="search-input" placeholder="🔍 Patente..." oninput="setSearch('flota',this.value)">
+
+    </div>
+
+    <div class="table-wrap"><table><thead><tr>
+
+      <th>Patente</th><th>Tipo</th><th>Propietario</th>
+
+      <th>VTV</th><th>Seguro RC</th><th>Libre Deuda</th>
+
+      <th>Mantenimiento</th><th>ADAS</th><th>Estado</th>
+
+    </tr></thead><tbody id="tbFlota"></tbody></table></div>
+
+  </div>
+
+</div>
+
+
+
+<!-- EMPRESA -->
+
+<div class="tab-content" id="tab-empresa">
+
+  <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)" id="kpiEmp"></div>
+
+  <div class="section">
+
+    <div class="section-head"><div class="section-title">Checklist Mensual — Empresa (SRC)</div></div>
+
+    <div class="table-wrap"><table><thead><tr>
+
+      <th>Documento / Requisito</th><th>Período</th><th>Responsable</th><th>Estado</th><th>Observaciones</th>
+
+    </tr></thead><tbody id="tbEmp"></tbody></table></div>
+
+  </div>
+
+  <div class="section" style="margin-top:16px">
+
+    <div class="section-head"><div class="section-title">📌 Recordatorios Clave</div></div>
+
+    <div style="padding:16px 20px;line-height:1.9;font-size:13px;color:var(--texto)">
+
+      <strong>Días 1–3 hábil del mes:</strong> Declarar aplicación de personal y vehículos en SRC (carácter de DDJJ).<br>
+
+      <strong>Día 5 hábil del mes:</strong> Enviar a YPF: indicadores IFA/IFAT y mejor observación preventiva del mes.<br>
+
+      <strong>Hasta el día 20 del mes:</strong> Cargar en SRC-Digitalización: F931 + VEP + recibos firmados + libre deuda gremial.<br>
+
+      <strong>Ante cualquier alta/baja:</strong> Notificar al Estudio Auditor por mail y registrar en SRC inmediatamente.
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<!-- VENCIMIENTOS -->
+
+<div class="tab-content" id="tab-vencimientos">
+
+  <div class="section">
+
+    <div class="section-head">
+
+      <div class="section-title">Timeline de Vencimientos</div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+
+        <span class="filter-label">Mostrar:</span>
+
+        <button class="filter-btn f-rojo active" onclick="setDiasVenc(30,this)">30d</button>
+
+        <button class="filter-btn" onclick="setDiasVenc(60,this)">60d</button>
+
+        <button class="filter-btn" onclick="setDiasVenc(90,this)">90d</button>
+
+      </div>
+
+    </div>
+
+    <div class="timeline" id="tlVenc"></div>
+
+  </div>
+
+  <div class="charts-row" style="grid-template-columns:1fr 1fr">
+
+    <div class="chart-box"><div class="chart-title">Vencimientos por Tipo de Documento</div><div class="bar-chart" id="barsTipo"></div></div>
+
+    <div class="chart-box"><div class="chart-title">Distribución por Mes</div><canvas id="barMeses" height="180"></canvas></div>
+
+  </div>
+
+</div>
+
+
+
+</div><!-- /main -->
+
+
+
+<!-- MODAL -->
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)cerrarModal()">
+
+  <div class="modal" id="modalContent"></div>
+
+</div>
+
+
+
+<script>
+
+// ══════════════════════════════════════════════
+
+//  CONFIG & STATE
+
+// ══════════════════════════════════════════════
+
+const LS_KEY_URL  = 'arce_api_url';
+
+const LS_KEY_DATA = 'arce_cached_data';
+
+const LS_KEY_TS   = 'arce_cache_ts';
+
+const CACHE_TTL   = 5 * 60 * 1000; // 5 minutos
+
+
+
+let API_URL   = localStorage.getItem(LS_KEY_URL) || '';
+
+let DATA      = null;
+
+let diasVenc  = 30;
+
+
+
+const FILTROS = {
+
+  condEst:'todos', condTipo:'todos', condSearch:'',
+
+  flotaEst:'todos', flotaTipo:'todos', flotaSearch:'',
+
+  condSort:{col:'nombre',asc:true}
+
+};
+
+
+
+// ══════════════════════════════════════════════
+
+//  INICIALIZACIÓN
+
+// ══════════════════════════════════════════════
+
+window.onload = function() {
+
+  document.getElementById('headerDate').textContent =
+
+    new Date().toLocaleDateString('es-AR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+
+
+  if(API_URL) {
+
+    document.getElementById('configBanner').classList.add('hidden');
+
+    document.getElementById('apiInput').value = API_URL;
+
+    cargarDatos(false);
+
+  } else {
+
+    // Intentar cargar desde caché
+
+    const cached = localStorage.getItem(LS_KEY_DATA);
+
+    if(cached) {
+
+      try { DATA = JSON.parse(cached); renderTodo(); } catch(e) {}
+
+    }
+
+  }
+
+};
+
+
+
+// ══════════════════════════════════════════════
+
+//  CARGA DE DATOS
+
+// ══════════════════════════════════════════════
+
+async function cargarDatos(forzar = false) {
+
+  setSyncStatus('loading','Conectando...');
+
+
+
+  // Verificar caché
+
+  if(!forzar && DATA) {
+
+    const ts = parseInt(localStorage.getItem(LS_KEY_TS) || '0');
+
+    if(Date.now() - ts < CACHE_TTL) {
+
+      setSyncStatus('ok','En caché');
+
+      renderTodo();
+
+      return;
+
+    }
+
+  }
+
+
+
+  if(!API_URL) {
+
+    setSyncStatus('error','Sin URL configurada');
+
+    return;
+
+  }
+
+
+
+  try {
+
+    // JSONP para evitar CORS
+
+    const url = API_URL + (API_URL.includes('?') ? '&' : '?') + 'callback=__apiCallback&t=' + Date.now();
+
+    await new Promise((resolve, reject) => {
+
+      window.__apiCallback = function(data) {
+
+        DATA = data;
+
+        localStorage.setItem(LS_KEY_DATA, JSON.stringify(data));
+
+        localStorage.setItem(LS_KEY_TS, Date.now().toString());
+
+        delete window.__apiCallback;
+
+        resolve();
+
+      };
+
+      const script = document.createElement('script');
+
+      script.src = url;
+
+      script.onerror = () => reject(new Error('Error de red'));
+
+      script.onload = () => setTimeout(() => { if(window.__apiCallback) reject(new Error('Timeout')); }, 10000);
+
+      document.head.appendChild(script);
+
+      setTimeout(() => { document.head.removeChild(script); }, 15000);
+
+    });
+
+
+
+    setSyncStatus('ok', 'Actualizado ' + (DATA.generado || ''));
+
+    renderTodo();
+
+  } catch(err) {
+
+    setSyncStatus('error','Error: ' + err.message);
+
+    // Intentar caché viejo
+
+    const cached = localStorage.getItem(LS_KEY_DATA);
+
+    if(cached) {
+
+      try {
+
+        DATA = JSON.parse(cached);
+
+        renderTodo();
+
+        setSyncStatus('error','Mostrando caché anterior');
+
+      } catch(e2) {}
+
+    }
+
+  }
+
+}
+
+
+
+function setSyncStatus(estado, label) {
+
+  const dot = document.getElementById('syncDot');
+
+  dot.className = 'sync-dot ' + (estado === 'loading' ? 'loading' : estado === 'error' ? 'error' : '');
+
+  document.getElementById('syncLabel').textContent = label;
+
+}
+
+
+
+function guardarAPI() {
+
+  const v = document.getElementById('apiInput').value.trim();
+
+  if(!v.startsWith('https://script.google.com')) {
+
+    alert('URL inválida. Debe comenzar con https://script.google.com/macros/s/...');
+
+    return;
+
+  }
+
+  API_URL = v;
+
+  localStorage.setItem(LS_KEY_URL, v);
+
+  document.getElementById('configBanner').classList.add('hidden');
+
+  cargarDatos(true);
+
+}
+
+
+
+function usarDemoLocal() {
+
+  DATA = generarDemoData();
+
+  document.getElementById('configBanner').classList.add('hidden');
+
+  setSyncStatus('ok','Modo demo local');
+
+  renderTodo();
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  RENDER PRINCIPAL
+
+// ══════════════════════════════════════════════
+
+function renderTodo() {
+
+  if(!DATA) return;
+
+  renderKPIs();
+
+  renderAlertas();
+
+  renderMesGrid();
+
+  renderDonut('donutCond','legCond', DATA.kpis?.conductores || calcKPI('conductores'));
+
+  renderDonut('donutFlota','legFlota', DATA.kpis?.flota || calcKPI('flota'));
+
+  renderICMBars();
+
+  renderConductores();
+
+  renderFlota();
+
+  renderEmpresa();
+
+  renderTimeline();
+
+  renderBarMeses();
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  KPIs
+
+// ══════════════════════════════════════════════
+
+function renderKPIs() {
+
+  const k = DATA.kpis || {};
+
+  const c = k.conductores || {}; const f = k.flota || {};
+
+  document.getElementById('kpiRow').innerHTML = `
+
+    <div class="kpi-card rojo"><div class="kpi-label">Conductores — Doc. Vencida</div><div class="kpi-valor">${c.vencido||0}</div><div class="kpi-sub">Acción inmediata</div></div>
+
+    <div class="kpi-card amarillo"><div class="kpi-label">Conductores — Por Vencer (30d)</div><div class="kpi-valor">${c.alerta||0}</div><div class="kpi-sub">Renovar pronto</div></div>
+
+    <div class="kpi-card verde"><div class="kpi-label">Conductores — Al Día</div><div class="kpi-valor">${c.ok||0}</div><div class="kpi-sub">Documentación completa</div></div>
+
+    <div class="kpi-card rojo"><div class="kpi-label">Vehículos — Doc. Vencida</div><div class="kpi-valor">${f.vencido||0}</div><div class="kpi-sub">No pueden circular</div></div>
+
+    <div class="kpi-card amarillo"><div class="kpi-label">ICM Bajo Umbral (&lt;70)</div><div class="kpi-valor">${k.icm_bajos||0}</div><div class="kpi-sub">Acción correctiva</div></div>
+
+  `;
+
+  const e = k.empresa || {};
+
+  document.getElementById('kpiEmp').innerHTML = `
+
+    <div class="kpi-card rojo"><div class="kpi-label">Requisitos Vencidos</div><div class="kpi-valor">${e.vencido||0}</div></div>
+
+    <div class="kpi-card amarillo"><div class="kpi-label">Por Resolver</div><div class="kpi-valor">${e.alerta||0}</div></div>
+
+    <div class="kpi-card verde"><div class="kpi-label">Al Día</div><div class="kpi-valor">${e.ok||0}</div></div>
+
+    <div class="kpi-card azul"><div class="kpi-label">Cumplimiento Global</div><div class="kpi-valor">${e.pct||0}%</div></div>
+
+  `;
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  ALERTAS
+
+// ══════════════════════════════════════════════
+
+function renderAlertas() {
+
+  const alertas = DATA.alertas || [];
+
+  const tb = document.getElementById('tbAlertas');
+
+  if(!alertas.length) { tb.innerHTML='<tr><td colspan="6" class="empty">🎉 Sin vencimientos en los próximos 30 días</td></tr>'; return; }
+
+  tb.innerHTML = alertas.map(a => `<tr>
+
+    <td>${badge(a.estado.toLowerCase())}</td>
+
+    <td><strong>${a.recurso}</strong></td>
+
+    <td><span style="font-size:10px;color:var(--gris)">${a.tipo}</span></td>
+
+    <td>${a.documento}</td>
+
+    <td>${a.fecha||'—'}</td>
+
+    <td><span class="badge ${a.estado.toLowerCase()}" style="font-family:var(--mono)">${a.dias<0?'VENC. hace '+(-a.dias)+'d':a.dias+'d'}</span></td>
+
+  </tr>`).join('');
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  CONDUCTORES
+
+// ══════════════════════════════════════════════
+
+function renderConductores() {
+
+  let data = [...(DATA.conductores || [])];
+
+  if(FILTROS.condEst !== 'todos')  data = data.filter(c => (c.estado_calculado||'').toUpperCase() === FILTROS.condEst);
+
+  if(FILTROS.condTipo !== 'todos') data = data.filter(c => (c.tipo||'').toUpperCase() === FILTROS.condTipo);
+
+  if(FILTROS.condSearch) data = data.filter(c => (c.nombre||'').toLowerCase().includes(FILTROS.condSearch.toLowerCase()));
+
+  const {col,asc} = FILTROS.condSort;
+
+  if(col==='nombre') data.sort((a,b)=>asc?a.nombre.localeCompare(b.nombre):b.nombre.localeCompare(a.nombre));
+
+  if(col==='icm')    data.sort((a,b)=>asc?a.icm-b.icm:b.icm-a.icm);
+
+
+
+  document.getElementById('tbCond').innerHTML = data.map(c => {
+
+    const eg = (c.estado_calculado||'OK').toLowerCase();
+
+    const icmColor = c.icm >= 70 ? 'var(--verde)' : 'var(--rojo)';
+
+    return `<tr onclick="abrirConductor('${c.nombre}')" style="cursor:pointer">
+
+      <td><strong>${c.nombre||'—'}</strong></td>
+
+      <td><span class="badge ${c.tipo==='PROPIO'?'ok':'na'}">${(c.tipo||'').toLowerCase()}</span></td>
+
+      <td><span style="font-family:var(--mono);font-weight:700;color:${icmColor}">${c.icm||0}</span></td>
+
+      <td>${badgeF(c.linti_vence)}</td>
+
+      <td>${badgeF(c.art_vence)}</td>
+
+      <td>${badgeF(c.seguro_vida_vence)}</td>
+
+      <td>${badgeF(c.apto_medico_vence)}</td>
+
+      <td>${badgeF(c.epp_entrega)}</td>
+
+      <td>${badgeF(c.manejo_defensivo_vence)}</td>
+
+      <td>${badgeF(c.arca_rrll_vence)}</td>
+
+      <td>${badge(eg)}</td>
+
+    </tr>`;
+
+  }).join('') || '<tr><td colspan="11" class="empty">Sin resultados</td></tr>';
+
+}
+
+
+
+function abrirConductor(nombre) {
+
+  const c = (DATA.conductores||[]).find(x=>x.nombre===nombre);
+
+  if(!c) return;
+
+  const eg = (c.estado_calculado||'OK').toLowerCase();
+
+  const icmColor = c.icm >= 70 ? 'var(--verde)' : 'var(--rojo)';
+
+  document.getElementById('modalContent').innerHTML = `
+
+    <div class="modal-head">
+
+      <div><div class="modal-title">${c.nombre}</div><div style="margin-top:4px">${badge(eg)} <span class="badge ${c.tipo==='PROPIO'?'ok':'na'}" style="margin-left:4px">${(c.tipo||'').toLowerCase()}</span></div></div>
+
+      <button class="modal-close" onclick="cerrarModal()">✕</button>
+
+    </div>
+
+    <div class="modal-grid">
+
+      <div class="modal-field"><label>ICM Actual</label><div class="val" style="color:${icmColor};font-size:28px;font-family:var(--mono);font-weight:700">${c.icm} <span style="font-size:13px;color:var(--gris)">/ 70 mín.</span></div></div>
+
+      <div class="modal-field"><label>Notas</label><div class="val" style="font-size:12px;color:var(--gris)">${c.notas||'—'}</div></div>
+
+      <div class="modal-field"><label>LINTI</label><div class="val">${badgeF(c.linti_vence,true)}</div></div>
+
+      <div class="modal-field"><label>ART</label><div class="val">${badgeF(c.art_vence,true)}</div></div>
+
+      <div class="modal-field"><label>Seguro de Vida</label><div class="val">${badgeF(c.seguro_vida_vence,true)}</div></div>
+
+      <div class="modal-field"><label>Apto Médico (Módulo 4)</label><div class="val">${badgeF(c.apto_medico_vence,true)}</div></div>
+
+      <div class="modal-field"><label>EPP Entregado</label><div class="val">${badgeF(c.epp_entrega,true)}</div></div>
+
+      <div class="modal-field"><label>Manejo Defensivo</label><div class="val">${badgeF(c.manejo_defensivo_vence,true)}</div></div>
+
+      <div class="modal-field"><label>ARCA / RRLL</label><div class="val">${badgeF(c.arca_rrll_vence,true)}</div></div>
+
+    </div>
+
+  `;
+
+  document.getElementById('modalOverlay').classList.add('open');
+
+}
+
+function cerrarModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+
+
+// ══════════════════════════════════════════════
+
+//  FLOTA
+
+// ══════════════════════════════════════════════
+
+function renderFlota() {
+
+  let data = [...(DATA.flota || [])];
+
+  if(FILTROS.flotaEst !== 'todos')  data = data.filter(v => (v.estado_calculado||'').toUpperCase() === FILTROS.flotaEst);
+
+  if(FILTROS.flotaTipo !== 'todos') data = data.filter(v => (v.tipo||'').toUpperCase() === FILTROS.flotaTipo);
+
+  if(FILTROS.flotaSearch) data = data.filter(v => (v.patente||'').toLowerCase().includes(FILTROS.flotaSearch.toLowerCase()));
+
+
+
+  document.getElementById('tbFlota').innerHTML = data.map(v => {
+
+    const eg = (v.estado_calculado||'OK').toLowerCase();
+
+    const adas = v.adas === 'SI' ? '<span class="badge ok">✓ Sí</span>' : v.adas === 'NO' ? '<span class="badge vencido">✗ No</span>' : '<span class="badge na">N/A</span>';
+
+    return `<tr>
+
+      <td><strong style="font-family:var(--mono)">${v.patente||'—'}</strong></td>
+
+      <td>${(v.tipo||'').toLowerCase()}</td>
+
+      <td>${v.propietario||'—'}</td>
+
+      <td>${badgeF(v.vtv_vence)}</td>
+
+      <td>${badgeF(v.seguro_rc_vence)}</td>
+
+      <td>${badgeF(v.libre_deuda_vence)}</td>
+
+      <td>${badgeF(v.mantenimiento_vence)}</td>
+
+      <td>${adas}</td>
+
+      <td>${badge(eg)}</td>
+
+    </tr>`;
+
+  }).join('') || '<tr><td colspan="9" class="empty">Sin resultados</td></tr>';
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  EMPRESA
+
+// ══════════════════════════════════════════════
+
+function renderEmpresa() {
+
+  document.getElementById('tbEmp').innerHTML = (DATA.empresa||[]).map(e=>`<tr>
+
+    <td><strong>${e.documento||'—'}</strong></td>
+
+    <td style="font-size:11px;color:var(--gris)">${e.periodo||'—'}</td>
+
+    <td>${e.responsable||'—'}</td>
+
+    <td>${badge((e.estado||'na').toLowerCase())}</td>
+
+    <td style="font-size:11px;color:var(--gris)">${e.observaciones||''}</td>
+
+  </tr>`).join('') || '<tr><td colspan="5" class="empty">Sin datos</td></tr>';
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  TIMELINE
+
+// ══════════════════════════════════════════════
+
+function renderTimeline() {
+
+  const alertas = generarAlertasLocal(diasVenc);
+
+  const c = {VENCIDO:'var(--rojo)',ALERTA:'var(--amarillo)',OK:'var(--verde)'};
+
+  document.getElementById('tlVenc').innerHTML = alertas.length
+
+    ? alertas.map(a=>`<div class="tl-row">
+
+        <div class="tl-dot" style="background:${c[a.estado]}"></div>
+
+        <div class="tl-conductor">${a.recurso}</div>
+
+        <div class="tl-doc">${a.tipo} — ${a.documento}</div>
+
+        <div class="tl-fecha" style="color:${c[a.estado]}">${a.fecha} ${a.dias<0?'(venc. hace '+(-a.dias)+'d)':'('+a.dias+'d)'}</div>
+
+      </div>`).join('')
+
+    : '<div class="empty">Sin vencimientos en este período</div>';
+
+
+
+  // Barras por tipo
+
+  const conteo = {};
+
+  alertas.forEach(a=>{ conteo[a.documento]=(conteo[a.documento]||0)+1; });
+
+  const sorted = Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
+
+  const maxV = sorted[0]?.[1]||1;
+
+  document.getElementById('barsTipo').innerHTML = sorted.map(([doc,n])=>`
+
+    <div class="bar-row">
+
+      <div class="bar-name" title="${doc}">${doc}</div>
+
+      <div class="bar-track"><div class="bar-fill" style="width:${n/maxV*100}%;background:var(--azul-claro)">${n}</div></div>
+
+      <div class="bar-num">${n}</div>
+
+    </div>`).join('')||'<div class="empty">Sin datos</div>';
+
+}
+
+
+
+function renderBarMeses() {
+
+  const canvas = document.getElementById('barMeses');
+
+  if(!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+
+  const conteo = {};
+
+  const DOCS_C = ['linti_vence','art_vence','seguro_vida_vence','apto_medico_vence','epp_entrega','manejo_defensivo_vence','arca_rrll_vence'];
+
+  const DOCS_F = ['vtv_vence','seguro_rc_vence','libre_deuda_vence','mantenimiento_vence'];
+
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+
+  [...(DATA.conductores||[]).flatMap(c=>DOCS_C.map(k=>c[k])),
+
+   ...(DATA.flota||[]).flatMap(v=>DOCS_F.map(k=>v[k]))]
+
+  .map(s=>parseFecha(s)).filter(d=>d && (d-hoy)>=0 && (d-hoy)<=90*864e5)
+
+  .forEach(d=>{ const mes=d.toLocaleDateString('es-AR',{month:'short'}); conteo[mes]=(conteo[mes]||0)+1; });
+
+  const labels=Object.keys(conteo), vals=labels.map(l=>conteo[l]);
+
+  const W=canvas.width, H=canvas.height;
+
+  ctx.clearRect(0,0,W,H);
+
+  if(!labels.length){ctx.fillStyle='#6B7280';ctx.font='11px IBM Plex Sans';ctx.fillText('Sin datos',10,80);return;}
+
+  const maxV=Math.max(...vals);
+
+  const barW=Math.max(20,Math.floor((W-30)/(labels.length+0.5)));
+
+  labels.forEach((l,i)=>{
+
+    const bh=Math.round((vals[i]/maxV)*(H-40));
+
+    const x=15+i*(barW+6), y=H-20-bh;
+
+    ctx.fillStyle='#2E75B6'; ctx.fillRect(x,y,barW,bh);
+
+    ctx.fillStyle='#1F2937'; ctx.font='10px IBM Plex Mono'; ctx.textAlign='center';
+
+    ctx.fillText(vals[i],x+barW/2,y-4);
+
+    ctx.fillStyle='#6B7280'; ctx.font='9px IBM Plex Sans';
+
+    ctx.fillText(l,x+barW/2,H-6);
+
+  });
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  HISTORIAL MENSUAL
+
+// ══════════════════════════════════════════════
+
+function renderMesGrid() {
+
+  const hist = DATA.icm?.historico || [];
+
+  if(!hist.length) { document.getElementById('mesGrid').innerHTML='<div class="empty" style="grid-column:1/-1">Sin datos históricos</div>'; return; }
+
+  document.getElementById('mesGrid').innerHTML = hist.map(m=>{
+
+    const cls = m.pct>=85?'bien':m.pct>=70?'medio':'mal';
+
+    return `<div class="mes-card ${cls}"><div class="mes-nombre">${m.mes}</div><div class="mes-pct">${m.pct}%</div><div style="font-size:10px;margin-top:2px;opacity:.7">cumplimiento</div></div>`;
+
+  }).join('');
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  DONUT CHART
+
+// ══════════════════════════════════════════════
+
+function renderDonut(canvasId, legId, kpi) {
+
+  const canvas = document.getElementById(canvasId); if(!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+
+  const total = (kpi.vencido||0)+(kpi.alerta||0)+(kpi.ok||0);
+
+  if(!total) { ctx.clearRect(0,0,120,120); return; }
+
+  const data = [
+
+    {val:kpi.ok||0, color:'#1A7A4A', label:'Al día'},
+
+    {val:kpi.alerta||0, color:'#B8860B', label:'Por vencer'},
+
+    {val:kpi.vencido||0, color:'#C0392B', label:'Vencido'},
+
+  ];
+
+  const cx=60,cy=60,r=50,ir=32;
+
+  ctx.clearRect(0,0,120,120);
+
+  let start=-Math.PI/2;
+
+  data.forEach(d=>{
+
+    if(!d.val) return;
+
+    const angle=(d.val/total)*Math.PI*2;
+
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,start+angle);ctx.closePath();
+
+    ctx.fillStyle=d.color;ctx.fill();start+=angle;
+
+  });
+
+  ctx.beginPath();ctx.arc(cx,cy,ir,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
+
+  ctx.fillStyle='#1F2937';ctx.font='bold 18px IBM Plex Mono';ctx.textAlign='center';ctx.textBaseline='middle';
+
+  ctx.fillText(total,cx,cy);
+
+  document.getElementById(legId).innerHTML=data.filter(d=>d.val>0).map(d=>`
+
+    <div class="legend-item"><div class="legend-dot" style="background:${d.color}"></div>
+
+    <div class="legend-label">${d.label}</div><div class="legend-val">${d.val}</div></div>`).join('');
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  ICM BARS
+
+// ══════════════════════════════════════════════
+
+function renderICMBars() {
+
+  const cond = [...(DATA.conductores||[])].filter(c=>c.icm>0).sort((a,b)=>b.icm-a.icm);
+
+  document.getElementById('icmBars').innerHTML = cond.map(c=>{
+
+    const color=c.icm>=90?'#1A7A4A':c.icm>=70?'#2E75B6':'#C0392B';
+
+    return `<div class="bar-row">
+
+      <div class="bar-name" title="${c.nombre}">${(c.nombre||'').split(' ')[0]}</div>
+
+      <div class="bar-track"><div class="bar-fill" style="width:${c.icm}%;background:${color};min-width:4px">${c.icm}</div></div>
+
+    </div>`;
+
+  }).join('') || '<div class="empty">Sin datos ICM</div>';
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  HELPERS
+
+// ══════════════════════════════════════════════
+
+function parseFecha(str) {
+
+  if(!str||str==='null'||str==='') return null;
+
+  const m=String(str).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+
+  if(m){const d=new Date(+m[3],+m[2]-1,+m[1]);d.setHours(0,0,0,0);return d;}
+
+  const d=new Date(str); return isNaN(d.getTime())?null:d;
+
+}
+
+function diasRest(str) {
+
+  const d=parseFecha(str); if(!d) return 9999;
+
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+
+  return Math.round((d-hoy)/(864e5));
+
+}
+
+function estFecha(str) {
+
+  const dias=diasRest(str);
+
+  if(dias===9999) return 'na';
+
+  if(dias<0)    return 'vencido';
+
+  if(dias<=30)  return 'alerta';
+
+  return 'ok';
+
+}
+
+function badge(est) {
+
+  const m={ok:'🟢 Al día',alerta:'🟡 Por vencer',vencido:'🔴 Vencido',na:'— N/A'};
+
+  return `<span class="badge ${est}">${m[est]||est}</span>`;
+
+}
+
+function badgeF(str, showDias=false) {
+
+  const e=estFecha(str), dias=diasRest(str);
+
+  const txt=str||'—';
+
+  const sub=showDias&&dias!==9999?(dias<0?` (hace ${-dias}d)`:`(${dias}d)`):'';
+
+  return `<span class="badge ${e}">${txt}${sub?'<br><small>'+sub+'</small>':''}</span>`;
+
+}
+
+function generarAlertasLocal(maxDias) {
+
+  const alertas=[];
+
+  const docsC=[['linti_vence','LINTI'],['art_vence','ART'],['seguro_vida_vence','Seg. Vida'],
+
+               ['apto_medico_vence','Apto Médico'],['epp_entrega','EPP'],
+
+               ['manejo_defensivo_vence','Man. Defensivo'],['arca_rrll_vence','ARCA/RRLL']];
+
+  (DATA.conductores||[]).forEach(c=>{
+
+    docsC.forEach(([k,lbl])=>{
+
+      const dias=diasRest(c[k]);
+
+      if(dias!==9999&&dias<=maxDias) alertas.push({recurso:c.nombre,tipo:'Conductor',documento:lbl,fecha:c[k],dias,estado:dias<0?'VENCIDO':'ALERTA'});
+
+    });
+
+  });
+
+  const docsF=[['vtv_vence','VTV'],['seguro_rc_vence','Seguro RC'],['libre_deuda_vence','Libre Deuda'],['mantenimiento_vence','Mantenimiento']];
+
+  (DATA.flota||[]).forEach(v=>{
+
+    docsF.forEach(([k,lbl])=>{
+
+      const dias=diasRest(v[k]);
+
+      if(dias!==9999&&dias<=maxDias) alertas.push({recurso:v.patente,tipo:'Vehículo',documento:lbl,fecha:v[k],dias,estado:dias<0?'VENCIDO':'ALERTA'});
+
+    });
+
+  });
+
+  return alertas.sort((a,b)=>a.dias-b.dias);
+
+}
+
+function calcKPI(tipo) {
+
+  const data=DATA[tipo]||[];
+
+  const ok=data.filter(x=>x.estado_calculado==='OK').length;
+
+  const al=data.filter(x=>x.estado_calculado==='ALERTA').length;
+
+  const vn=data.filter(x=>x.estado_calculado==='VENCIDO').length;
+
+  return {ok,alerta:al,vencido:vn,total:data.length,pct:data.length?Math.round(ok/data.length*100):0};
+
+}
+
+
+
+// Filtros y búsqueda
+
+function filtrar(campo, valor, btn) {
+
+  FILTROS[campo]=valor;
+
+  const grp=['condEst','condTipo'].includes(campo)?'#tab-conductores .filters':
+
+             ['flotaEst','flotaTipo'].includes(campo)?'#tab-flota .filters':'';
+
+  if(grp) {
+
+    const btns=document.querySelectorAll(grp+' .filter-btn');
+
+    btns.forEach(b=>{ if(b.onclick===btn.onclick||b.textContent.trim()===btn.textContent.trim()) return; });
+
+    btn.parentElement.querySelectorAll('.filter-btn').forEach(b=>{
+
+      if(b.textContent===btn.textContent) b.classList.add('active');
+
+      else if(['condEst','flotaEst'].includes(campo)&&['Todos','🔴 Vencido','🟡 Por vencer','🟢 Al día'].some(x=>b.textContent.includes(x))) b.classList.remove('active');
+
+      else if(['condTipo','flotaTipo'].includes(campo)&&['Todos','Propios','Fleteros','Camión','Semi','Camioneta'].some(x=>b.textContent.includes(x))) b.classList.remove('active');
+
+    });
+
+  }
+
+  if(['condEst','condTipo'].includes(campo)) renderConductores();
+
+  else renderFlota();
+
+}
+
+function setSearch(cual, val) {
+
+  if(cual==='cond'){FILTROS.condSearch=val;renderConductores();}
+
+  else{FILTROS.flotaSearch=val;renderFlota();}
+
+}
+
+function setSort(cual, col) {
+
+  if(cual==='cond'){
+
+    FILTROS.condSort={col,asc:FILTROS.condSort.col===col?!FILTROS.condSort.asc:true};
+
+    renderConductores();
+
+  }
+
+}
+
+function setDiasVenc(dias, btn) {
+
+  diasVenc=dias;
+
+  btn.closest('div').querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+
+  btn.classList.add('active');
+
+  renderTimeline(); renderBarMeses();
+
+}
+
+
+
+// Export CSV
+
+function exportCSV(tipo) {
+
+  let csv='', nombre='';
+
+  if(tipo==='alertas') {
+
+    csv='Estado,Recurso,Tipo,Documento,Vencimiento,Dias\n';
+
+    (DATA.alertas||[]).forEach(a=>{ csv+=`"${a.estado}","${a.recurso}","${a.tipo}","${a.documento}","${a.fecha}","${a.dias}"\n`; });
+
+    nombre='alertas_arce.csv';
+
+  } else if(tipo==='conductores') {
+
+    csv='Conductor,Tipo,ICM,LINTI,ART,Seg.Vida,Apto Medico,EPP,Man.Defensivo,ARCA,Estado\n';
+
+    (DATA.conductores||[]).forEach(c=>{ csv+=`"${c.nombre}","${c.tipo}",${c.icm},"${c.linti_vence||''}","${c.art_vence||''}","${c.seguro_vida_vence||''}","${c.apto_medico_vence||''}","${c.epp_entrega||''}","${c.manejo_defensivo_vence||''}","${c.arca_rrll_vence||''}","${c.estado_calculado||''}"\n`; });
+
+    nombre='conductores_arce.csv';
+
+  } else if(tipo==='flota') {
+
+    csv='Patente,Tipo,Propietario,VTV,Seguro,Libre Deuda,Mantenimiento,ADAS,Estado\n';
+
+    (DATA.flota||[]).forEach(v=>{ csv+=`"${v.patente}","${v.tipo}","${v.propietario}","${v.vtv_vence||''}","${v.seguro_rc_vence||''}","${v.libre_deuda_vence||''}","${v.mantenimiento_vence||''}","${v.adas}","${v.estado_calculado||''}"\n`; });
+
+    nombre='flota_arce.csv';
+
+  }
+
+  const a=document.createElement('a');
+
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+
+  a.download=nombre; a.click();
+
+}
+
+
+
+// Tabs
+
+function showTab(id) {
+
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+
+  document.getElementById('tab-'+id).classList.add('active');
+
+  event.currentTarget.classList.add('active');
+
+  if(id==='conductores') renderConductores();
+
+  if(id==='flota') renderFlota();
+
+  if(id==='empresa') renderEmpresa();
+
+  if(id==='vencimientos'){renderTimeline();setTimeout(renderBarMeses,50);}
+
+}
+
+
+
+// ══════════════════════════════════════════════
+
+//  DATOS DEMO (fallback sin API)
+
+// ══════════════════════════════════════════════
+
+function generarDemoData() {
+
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+
+  function fd(dias){const d=new Date(hoy);d.setDate(d.getDate()+dias);return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;}
+
+  const conductores=[
+
+    {nombre:'Bogado Digno',tipo:'PROPIO',icm:82,linti_vence:fd(45),art_vence:fd(120),seguro_vida_vence:fd(200),apto_medico_vence:fd(15),epp_entrega:fd(300),manejo_defensivo_vence:fd(90),arca_rrll_vence:fd(180),notas:''},
+
+    {nombre:'Funez Oscar',tipo:'PROPIO',icm:74,linti_vence:fd(-5),art_vence:fd(80),seguro_vida_vence:fd(150),apto_medico_vence:fd(60),epp_entrega:fd(250),manejo_defensivo_vence:fd(40),arca_rrll_vence:fd(130),notas:'LINTI vencido'},
+
+    {nombre:'Vasconcelo Fernando',tipo:'FLETERO',icm:68,linti_vence:fd(10),art_vence:fd(-10),seguro_vida_vence:fd(100),apto_medico_vence:fd(95),epp_entrega:fd(200),manejo_defensivo_vence:fd(120),arca_rrll_vence:fd(60),notas:'ART vencida + ICM bajo'},
+
+    {nombre:'Velazquez Marcelo',tipo:'PROPIO',icm:55,linti_vence:fd(20),art_vence:fd(60),seguro_vida_vence:fd(180),apto_medico_vence:fd(-3),epp_entrega:fd(150),manejo_defensivo_vence:fd(30),arca_rrll_vence:fd(80),notas:'ICM crítico'},
+
+    {nombre:'Braian Mauricio',tipo:'PROPIO',icm:91,linti_vence:fd(200),art_vence:fd(25),seguro_vida_vence:fd(200),apto_medico_vence:fd(180),epp_entrega:fd(300),manejo_defensivo_vence:fd(180),arca_rrll_vence:fd(90),notas:''},
+
+    {nombre:'Cignarelli Marcelo',tipo:'FLETERO',icm:62,linti_vence:fd(-15),art_vence:fd(-8),seguro_vida_vence:fd(50),apto_medico_vence:fd(22),epp_entrega:fd(180),manejo_defensivo_vence:fd(15),arca_rrll_vence:fd(40),notas:'URGENTE'},
+
+    {nombre:'Alcanis Maximiliano',tipo:'PROPIO',icm:93,linti_vence:fd(250),art_vence:fd(300),seguro_vida_vence:fd(350),apto_medico_vence:fd(220),epp_entrega:fd(320),manejo_defensivo_vence:fd(280),arca_rrll_vence:fd(300),notas:''},
+
+  ];
+
+  conductores.forEach(c=>{
+
+    const campos=['linti_vence','art_vence','seguro_vida_vence','apto_medico_vence','epp_entrega','manejo_defensivo_vence','arca_rrll_vence'];
+
+    const estados=campos.map(k=>estFecha(c[k]));
+
+    c.estado_calculado=estados.includes('vencido')?'VENCIDO':estados.includes('alerta')?'ALERTA':'OK';
+
+  });
+
+  const flota=[
+
+    {patente:'AC214WS',tipo:'CAMION',propietario:'Arce Hnos.',vtv_vence:fd(20),seguro_rc_vence:fd(90),libre_deuda_vence:fd(90),mantenimiento_vence:fd(30),adas:'NO',notas:'VTV por vencer'},
+
+    {patente:'PBZ608',tipo:'CAMION',propietario:'Arce Hnos.',vtv_vence:fd(180),seguro_rc_vence:fd(200),libre_deuda_vence:fd(200),mantenimiento_vence:fd(60),adas:'SI',notas:''},
+
+    {patente:'AB123CD',tipo:'CAMION',propietario:'Fletero 1',vtv_vence:fd(-10),seguro_rc_vence:fd(40),libre_deuda_vence:fd(40),mantenimiento_vence:fd(15),adas:'NO',notas:'VTV VENCIDA'},
+
+    {patente:'GH789IJ',tipo:'SEMI',propietario:'Fletero 2',vtv_vence:fd(25),seguro_rc_vence:fd(-5),libre_deuda_vence:fd(-5),mantenimiento_vence:fd(45),adas:'NO',notas:'Seguro vencido'},
+
+  ];
+
+  flota.forEach(v=>{
+
+    const campos=['vtv_vence','seguro_rc_vence','libre_deuda_vence','mantenimiento_vence'];
+
+    const estados=campos.map(k=>estFecha(v[k]));
+
+    v.estado_calculado=estados.includes('vencido')?'VENCIDO':estados.includes('alerta')?'ALERTA':'OK';
+
+  });
+
+  const condOk=conductores.filter(c=>c.estado_calculado==='OK').length;
+
+  const condAl=conductores.filter(c=>c.estado_calculado==='ALERTA').length;
+
+  const condVn=conductores.filter(c=>c.estado_calculado==='VENCIDO').length;
+
+  const flotaOk=flota.filter(v=>v.estado_calculado==='OK').length;
+
+  const flotaAl=flota.filter(v=>v.estado_calculado==='ALERTA').length;
+
+  const flotaVn=flota.filter(v=>v.estado_calculado==='VENCIDO').length;
+
+  const empresa=[
+
+    {documento:'F931 + VEP',periodo:'Mensual',responsable:'Germán Sacchi',estado:'OK',observaciones:'Al día'},
+
+    {documento:'Libre deuda gremial',periodo:'Mensual',responsable:'Germán Sacchi',estado:'ALERTA',observaciones:'Vence en 12 días'},
+
+    {documento:'Observación preventiva mensual',periodo:'Mensual',responsable:'Nicolás',estado:'VENCIDO',observaciones:'Pendiente'},
+
+    {documento:'Plan CAS 2026',periodo:'Anual',responsable:'Germán Sacchi',estado:'OK',observaciones:'Presentado'},
+
+  ];
+
+  const empOk=empresa.filter(e=>e.estado==='OK').length;
+
+  const empAl=empresa.filter(e=>e.estado==='ALERTA').length;
+
+  const empVn=empresa.filter(e=>e.estado==='VENCIDO').length;
+
+  const icm={historico:[{mes:'Ene 26',pct:75,estado:'🟡 REGULAR'},{mes:'Feb 26',pct:82,estado:'🟢 BIEN'},{mes:'Mar 26',pct:88,estado:'🟢 BIEN'},{mes:'Abr 26',pct:85,estado:'🟢 BIEN'}]};
+
+  const hoyStr=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  const data={conductores,flota,empresa,icm,generado:hoyStr,
+
+    kpis:{conductores:{ok:condOk,alerta:condAl,vencido:condVn,total:conductores.length,pct:Math.round(condOk/conductores.length*100)},
+
+          flota:{ok:flotaOk,alerta:flotaAl,vencido:flotaVn,total:flota.length,pct:Math.round(flotaOk/flota.length*100)},
+
+          empresa:{ok:empOk,alerta:empAl,vencido:empVn,total:empresa.length,pct:Math.round(empOk/empresa.length*100)},icm_bajos:conductores.filter(c=>c.icm<70).length}};
+
+  data.alertas=generarAlertasConData(data,30);
+
+  return data;
+
+}
+
+function generarAlertasConData(data,maxDias){
+
+  const alertas=[];
+
+  const docsC=[['linti_vence','LINTI'],['art_vence','ART'],['seguro_vida_vence','Seg. Vida'],['apto_medico_vence','Apto Médico'],['epp_entrega','EPP'],['manejo_defensivo_vence','Man. Defensivo'],['arca_rrll_vence','ARCA/RRLL']];
+
+  (data.conductores||[]).forEach(c=>{docsC.forEach(([k,l])=>{const d=diasRest(c[k]);if(d!==9999&&d<=maxDias)alertas.push({recurso:c.nombre,tipo:'Conductor',documento:l,fecha:c[k],dias:d,estado:d<0?'VENCIDO':'ALERTA'});});});
+
+  const docsF=[['vtv_vence','VTV'],['seguro_rc_vence','Seguro RC'],['libre_deuda_vence','Libre Deuda'],['mantenimiento_vence','Mantenimiento']];
+
+  (data.flota||[]).forEach(v=>{docsF.forEach(([k,l])=>{const d=diasRest(v[k]);if(d!==9999&&d<=maxDias)alertas.push({recurso:v.patente,tipo:'Vehículo',documento:l,fecha:v[k],dias:d,estado:d<0?'VENCIDO':'ALERTA'});});});
+
+  return alertas.sort((a,b)=>a.dias-b.dias);
+
+}
+
+</script>
+
+</body>
+
+</html>
+
