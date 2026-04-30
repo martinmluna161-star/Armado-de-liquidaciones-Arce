@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Torre de Control — Arce Hnos. · YPF</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+
+:root{
+
+  --bg:#070a0e;--bg2:#0d1218;--bg3:#141b24;--bg4:#1a2330;
+
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.13);
+
+  --text:#dde3ed;--text2:#7a8699;--text3:#3d4a5c;
+
+  --green:#2dd98f;--gbg:rgba(45,217,143,0.08);--gbd:rgba(45,217,143,0.2);
+
+  --amber:#f0a841;--abg:rgba(240,168,65,0.08);--abd:rgba(240,168,65,0.22);
+
+  --red:#f05050;--rbg:rgba(240,80,80,0.08);--rbd:rgba(240,80,80,0.22);
+
+  --blue:#5b9cf6;--bbg:rgba(91,156,246,0.08);--bbd:rgba(91,156,246,0.22);
+
+  --r:9px;
+
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+html,body{height:100%;overflow:hidden}
+
+body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text);font-size:13px;display:flex;flex-direction:column}
+
+::-webkit-scrollbar{width:3px;height:3px}
+
+::-webkit-scrollbar-track{background:transparent}
+
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+ 
+
+/* TOPBAR */
+
+.topbar{height:48px;flex-shrink:0;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;gap:12px}
+
+.tl{display:flex;align-items:center;gap:12px}
+
+.ypf-badge{background:#1560BD;color:#fff;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;padding:3px 9px;border-radius:5px;letter-spacing:.08em}
+
+.app-name{font-size:13px;font-weight:500}
+
+.app-route{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+.tr{display:flex;align-items:center;gap:8px}
+
+.live-pill{display:flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--green);background:var(--gbg);border:1px solid var(--gbd);padding:3px 10px;border-radius:20px}
+
+.ldot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:blink 2s infinite}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+.ts-lbl{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+.btn{font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:all .15s;border:1px solid var(--border2);background:var(--bg3);color:var(--text2)}
+
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+
+.btn-blue{background:var(--bbg);border-color:var(--bbd);color:var(--blue)}
+
+.btn-blue:hover{background:rgba(91,156,246,0.15)}
+
+ 
+
+/* BODY */
+
+.body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+
+.scroll{flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:12px}
+
+ 
+
+/* CONFIG */
+
+.cfg{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:14px 16px;display:none}
+
+.cfg.open{display:block}
+
+.cfg-title{font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+
+.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end}
+
+.cfg-field{display:flex;flex-direction:column;gap:4px}
+
+.cfg-lbl{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.06em}
+
+.cfg-input{padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;width:100%}
+
+.cfg-input:focus{border-color:var(--blue)}
+
+.cfg-note{font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6}
+
+.cfg-note code{color:var(--amber);font-family:'JetBrains Mono',monospace;font-size:10px}
+
+ 
+
+/* KPI */
+
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px}
+
+.kpi-lbl{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+
+.kpi-val{font-size:24px;font-weight:300;line-height:1;font-family:'JetBrains Mono',monospace}
+
+.kpi-meta{font-size:10px;color:var(--text3);margin-top:4px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+
+.chip{display:inline-block;font-size:9px;padding:1px 6px;border-radius:8px;font-family:'JetBrains Mono',monospace}
+
+.chip-g{background:var(--gbg);color:var(--green);border:1px solid var(--gbd)}
+
+.chip-a{background:var(--abg);color:var(--amber);border:1px solid var(--abd)}
+
+.chip-r{background:var(--rbg);color:var(--red);border:1px solid var(--rbd)}
+
+.chip-b{background:var(--bbg);color:var(--blue);border:1px solid var(--bbd)}
+
+ 
+
+/* GRID */
+
+.main-grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
+
+.left-col{display:flex;flex-direction:column;gap:12px}
+
+.right-col{display:flex;flex-direction:column;gap:12px}
+
+ 
+
+/* PANEL */
+
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+
+.pt{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text2);text-transform:uppercase;letter-spacing:.08em}
+
+.pa{font-size:10px;color:var(--blue);cursor:pointer;background:none;border:none;font-family:'JetBrains Mono',monospace}
+
+.pa-row{display:flex;gap:6px}
+
+ 
+
+/* TABLE */
+
+.tbl{width:100%;border-collapse:collapse;font-size:11px}
+
+.tbl th{text-align:left;color:var(--text3);font-weight:400;font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.06em;padding:4px 8px;border-bottom:1px solid var(--border)}
+
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+
+.tbl tr:last-child td{border-bottom:none}
+
+.tbl tr:hover td{background:var(--bg3)}
+
+.mono{font-family:'JetBrains Mono',monospace;font-size:10px}
+
+.pill{display:inline-flex;align-items:center;font-size:9px;padding:2px 7px;border-radius:8px;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+
+.pg{background:var(--gbg);color:var(--green);border:1px solid var(--gbd)}
+
+.pa2{background:var(--abg);color:var(--amber);border:1px solid var(--abd)}
+
+.pr{background:var(--rbg);color:var(--red);border:1px solid var(--rbd)}
+
+.pb{background:var(--bbg);color:var(--blue);border:1px solid var(--bbd)}
+
+.pn{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+
+.pat{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;color:var(--text);background:var(--bg4);padding:1px 5px;border-radius:3px;border:1px solid var(--border2)}
+
+.map-link{font-size:9px;color:var(--blue);text-decoration:none;font-family:'JetBrains Mono',monospace;padding:2px 6px;border:1px solid var(--bbd);border-radius:5px}
+
+.map-link:hover{background:var(--bbg)}
+
+.icm-wrap{display:flex;align-items:center;gap:5px}
+
+.icm-bg{width:44px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+
+.icm-fill{height:100%;border-radius:2px}
+
+ 
+
+/* ALERT FEED */
+
+.af{display:flex;flex-direction:column;gap:5px}
+
+.ai{display:flex;align-items:flex-start;gap:8px;padding:8px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg3);cursor:pointer;transition:border-color .15s;text-decoration:none}
+
+.ai:hover{border-color:var(--border2)}
+
+.ai-ico{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500}
+
+.aig{background:var(--gbg);color:var(--green)}
+
+.aia{background:var(--abg);color:var(--amber)}
+
+.air{background:var(--rbg);color:var(--red)}
+
+.aib{background:var(--bbg);color:var(--blue)}
+
+.ai-body{flex:1;min-width:0}
+
+.ai-t{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+
+.ai-d{font-size:9px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.ai-ts{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+
+ 
+
+/* ICM */
+
+.icm-list{display:flex;flex-direction:column;gap:7px}
+
+.icm-row{display:flex;align-items:center;gap:6px}
+
+.icm-name{font-size:10px;color:var(--text2);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.icm-track{flex:1;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden}
+
+.icm-f{height:100%;border-radius:3px;transition:width 1s}
+
+.icm-num{font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:500;width:24px;text-align:right}
+
+ 
+
+/* MINI STATS */
+
+.mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+
+.ms{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:6px;background:var(--bg3);font-size:10px}
+
+.ms-lbl{color:var(--text2)}
+
+.ms-val{font-family:'JetBrains Mono',monospace;font-weight:500}
+
+ 
+
+/* DOCS VENCIMIENTOS */
+
+.docs-kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+
+.dk{background:var(--bg3);border-radius:7px;padding:8px 10px;display:flex;align-items:center;gap:8px;border:1px solid var(--border)}
+
+.dk-ico{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+
+.dk-val{font-size:18px;font-weight:500;font-family:'JetBrains Mono',monospace;line-height:1}
+
+.dk-lbl{font-size:9px;color:var(--text3);margin-top:2px}
+
+.venc-list{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto}
+
+.vi{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);font-size:10px;background:var(--bg3)}
+
+.vi-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+.vi-body{flex:1;min-width:0}
+
+.vi-title{font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.vi-sub{color:var(--text3);font-size:9px;margin-top:1px}
+
+.vi-dias{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;flex-shrink:0;min-width:52px;text-align:right}
+
+ 
+
+/* EMPTY */
+
+.empty{text-align:center;padding:20px;color:var(--text3);font-size:11px}
+
+.empty code{color:var(--amber);font-family:'JetBrains Mono',monospace;font-size:10px}
+
+ 
+
+/* TABS */
+
+.tabs{display:flex;gap:2px;background:var(--bg);border-radius:6px;padding:2px;margin-bottom:10px;border:1px solid var(--border)}
+
+.tab{flex:1;padding:4px;text-align:center;font-size:9px;font-family:'JetBrains Mono',monospace;border-radius:4px;cursor:pointer;color:var(--text3);transition:all .15s;text-transform:uppercase;letter-spacing:.05em}
+
+.tab.on{background:var(--bg2);color:var(--text);border:1px solid var(--border2)}
+
+.loc-text{font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;display:inline-block}
+
+</style>
+
+</head>
+
+<body>
+
+ 
+
+<div class="topbar">
+
+  <div class="tl">
+
+    <div class="ypf-badge">YPF</div>
+
+    <span class="app-name">Torre de Control — Arce Hnos.</span>
+
+    <span class="app-route">Ibicuy / Zárate / San Pedro → Añelo</span>
+
+  </div>
+
+  <div class="tr">
+
+    <div class="live-pill"><div class="ldot"></div><span id="live-lbl">EN VIVO</span></div>
+
+    <span class="ts-lbl" id="ts-lbl">—</span>
+
+    <button class="btn" onclick="toggleCfg()">⚙ fuentes</button>
+
+    <button class="btn btn-blue" onclick="loadData()">↻ actualizar</button>
+
+  </div>
+
+</div>
+
+ 
+
+<div class="body">
+
+<div class="scroll">
+
+ 
+
+<!-- CONFIG -->
+
+<div class="cfg" id="cfg">
+
+  <div class="cfg-title">// configurar fuentes — Google Sheet CSV</div>
+
+  <div class="cfg-grid">
+
+    <div class="cfg-field">
+
+      <label class="cfg-lbl">Alertas (CSV)</label>
+
+      <input class="cfg-input" id="c-alertas" placeholder="https://docs.google.com/spreadsheets/d/ID/pub?gid=0&output=csv">
+
+    </div>
+
+    <div class="cfg-field">
+
+      <label class="cfg-lbl">Flota (CSV)</label>
+
+      <input class="cfg-input" id="c-flota" placeholder="...pub?gid=XXXXX&output=csv">
+
+    </div>
+
+    <div class="cfg-field">
+
+      <label class="cfg-lbl">ICM (CSV)</label>
+
+      <input class="cfg-input" id="c-icm" placeholder="...pub?gid=XXXXX&output=csv">
+
+    </div>
+
+    <div class="cfg-field">
+
+      <label class="cfg-lbl">Documentacion (CSV)</label>
+
+      <input class="cfg-input" id="c-docs" placeholder="...pub?gid=XXXXX&output=csv">
+
+    </div>
+
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+
+    <label class="cfg-lbl" style="white-space:nowrap">Actualizar cada</label>
+
+    <input class="cfg-input" id="c-interval" type="number" value="60" min="15" style="width:70px">
+
+    <label class="cfg-lbl">seg</label>
+
+    <button class="btn btn-blue" onclick="saveCfg()">Guardar y conectar</button>
+
+  </div>
+
+  <div class="cfg-note">
+
+    Publicar cada hoja: <code>Archivo → Publicar en la web → elegir hoja → CSV → Publicar</code>
+
+  </div>
+
+</div>
+
+ 
+
+<!-- KPIs -->
+
+<div class="kpi-row">
+
+  <div class="kpi">
+
+    <div class="kpi-lbl">Unidades monitoreadas</div>
+
+    <div class="kpi-val">7</div>
+
+    <div class="kpi-meta" style="font-size:9px;color:var(--text3)">AF206YP · AF087FB · AD751NF · AE468CL · AI063WC · AH920LF · AH920LE</div>
+
+  </div>
+
+  <div class="kpi">
+
+    <div class="kpi-lbl">Alertas hoy</div>
+
+    <div class="kpi-val" id="k-alertas-hoy" style="color:var(--red)">—</div>
+
+    <div class="kpi-meta" id="k-alertas-chips">cargando...</div>
+
+  </div>
+
+  <div class="kpi">
+
+    <div class="kpi-lbl">Última alerta</div>
+
+    <div class="kpi-val" id="k-ultima" style="font-size:14px;padding-top:5px;color:var(--amber)">—</div>
+
+    <div class="kpi-meta" id="k-ultima-meta">—</div>
+
+  </div>
+
+  <div class="kpi">
+
+    <div class="kpi-lbl">Docs vencidos / próximos</div>
+
+    <div class="kpi-val" id="k-docs-criticos" style="color:var(--red)">—</div>
+
+    <div class="kpi-meta" id="k-docs-meta">sin datos de documentación</div>
+
+  </div>
+
+</div>
+
+ 
+
+<!-- MAIN GRID -->
+
+<div class="main-grid">
+
+ 
+
+  <!-- COLUMNA IZQUIERDA -->
+
+  <div class="left-col">
+
+ 
+
+    <!-- FLOTA -->
+
+    <div class="panel">
+
+      <div class="ph">
+
+        <span class="pt">// estado de flota — 7 unidades</span>
+
+      </div>
+
+      <table class="tbl">
+
+        <thead><tr>
+
+          <th>Unidad</th><th>Patente</th><th>Chofer</th>
+
+          <th>Última alerta</th><th>Tipo</th><th>Severidad</th>
+
+          <th>Ubicación</th><th>Alertas hoy</th><th>Mapa</th>
+
+        </tr></thead>
+
+        <tbody id="fleet-body"></tbody>
+
+      </table>
+
+    </div>
+
+ 
+
+    <!-- ALERTAS -->
+
+    <div class="panel">
+
+      <div class="ph">
+
+        <span class="pt">// registro alertas Pressa</span>
+
+        <div class="pa-row">
+
+          <button class="pa" id="fb-todas" onclick="filtrar('todas',this)" style="color:var(--blue)">todas</button>
+
+          <button class="pa" id="fb-alta"  onclick="filtrar('alta',this)">altas</button>
+
+          <button class="pa" id="fb-media" onclick="filtrar('media',this)">medias</button>
+
+        </div>
+
+      </div>
+
+      <div id="alertas-container">
+
+        <div class="empty">Conectá el Sheet en <code>⚙ fuentes</code></div>
+
+      </div>
+
+    </div>
+
+ 
+
+  </div>
+
+ 
+
+  <!-- COLUMNA DERECHA -->
+
+  <div class="right-col">
+
+ 
+
+    <!-- ALERTAS POR TIPO -->
+
+    <div class="panel">
+
+      <div class="ph"><span class="pt">// alertas por tipo — hoy</span></div>
+
+      <div class="mini-stats">
+
+        <div class="ms"><span class="ms-lbl">Giro brusco</span><span class="ms-val" id="ms-giro">—</span></div>
+
+        <div class="ms"><span class="ms-lbl">Frenada</span><span class="ms-val" id="ms-frenada">—</span></div>
+
+        <div class="ms"><span class="ms-lbl">Velocidad</span><span class="ms-val" id="ms-vel" style="color:var(--red)">—</span></div>
+
+        <div class="ms"><span class="ms-lbl">Aceleración</span><span class="ms-val" id="ms-acel">—</span></div>
+
+        <div class="ms"><span class="ms-lbl">Desvío</span><span class="ms-val" id="ms-desvio" style="color:var(--amber)">—</span></div>
+
+        <div class="ms"><span class="ms-lbl">Otros</span><span class="ms-val" id="ms-otros">—</span></div>
+
+      </div>
+
+    </div>
+
+ 
+
+    <!-- ICM -->
+
+    <div class="panel">
+
+      <div class="ph">
+
+        <span class="pt">// ICM por unidad</span>
+
+        <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">límite YPF: 70</span>
+
+      </div>
+
+      <div class="icm-list" id="icm-list">
+
+        <div class="empty" style="padding:10px">Sin datos ICM</div>
+
+      </div>
+
+    </div>
+
+ 
+
+    <!-- DOCUMENTACIÓN VENCIMIENTOS -->
+
+    <div class="panel">
+
+      <div class="ph">
+
+        <span class="pt">// vencimientos documentación</span>
+
+      </div>
+
+      <!-- 4 contadores -->
+
+      <div class="docs-kpis">
+
+        <div class="dk">
+
+          <div class="dk-ico air">!</div>
+
+          <div>
+
+            <div class="dk-val" id="dk-venc" style="color:var(--red)">—</div>
+
+            <div class="dk-lbl">Vencidos</div>
+
+          </div>
+
+        </div>
+
+        <div class="dk">
+
+          <div class="dk-ico air">7d</div>
+
+          <div>
+
+            <div class="dk-val" id="dk-7d" style="color:var(--red)">—</div>
+
+            <div class="dk-lbl">Vencen en ≤7 días</div>
+
+          </div>
+
+        </div>
+
+        <div class="dk">
+
+          <div class="dk-ico aia">15d</div>
+
+          <div>
+
+            <div class="dk-val" id="dk-15d" style="color:var(--amber)">—</div>
+
+            <div class="dk-lbl">Vencen en 8–15 días</div>
+
+          </div>
+
+        </div>
+
+        <div class="dk">
+
+          <div class="dk-ico aig">OK</div>
+
+          <div>
+
+            <div class="dk-val" id="dk-ok" style="color:var(--green)">—</div>
+
+            <div class="dk-lbl">Al día (&gt;15 días)</div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Lista de urgentes -->
+
+      <div class="venc-list" id="venc-list">
+
+        <div class="empty" style="padding:8px">Conectá la hoja Documentacion en <code>⚙ fuentes</code></div>
+
+      </div>
+
+    </div>
+
+ 
+
+    <!-- FEED ÚLTIMAS ALERTAS -->
+
+    <div class="panel">
+
+      <div class="ph"><span class="pt">// últimas alertas</span></div>
+
+      <div class="af" id="alert-feed">
+
+        <div class="empty" style="padding:8px">Sin alertas</div>
+
+      </div>
+
+    </div>
+
+ 
+
+  </div>
+
+</div><!-- /main-grid -->
+
+ 
+
+</div><!-- /scroll -->
+
+</div><!-- /body -->
+
+ 
+
+<script>
+
+/* ════════════════════════════════════════
+
+   ESTADO GLOBAL
+
+════════════════════════════════════════ */
+
+let CFG = {alertasUrl:'',flotaUrl:'',icmUrl:'',docsUrl:'',interval:60};
+
+let timer = null;
+
+let alertasData = [];
+
+let flotaData   = [];
+
+let icmData     = [];
+
+let docsData    = [];
+
+let filtroActual = 'todas';
+
+ 
+
+const FLOTA_BASE = [
+
+  {unidad:'ARC-01',patente:'AF206YP'},
+
+  {unidad:'ARC-02',patente:'AF087FB'},
+
+  {unidad:'ARC-03',patente:'AD751NF'},
+
+  {unidad:'ARC-04',patente:'AE468CL'},
+
+  {unidad:'ARC-05',patente:'AI063WC'},
+
+  {unidad:'ARC-06',patente:'AH920LF'},
+
+  {unidad:'ARC-07',patente:'AH920LE'},
+
+];
+
+ 
+
+let ICM_MANUAL = [
+
+  {unidad:'ARC-01',patente:'AF206YP',v:88},
+
+  {unidad:'ARC-02',patente:'AF087FB',v:91},
+
+  {unidad:'ARC-03',patente:'AD751NF',v:76},
+
+  {unidad:'ARC-04',patente:'AE468CL',v:62},
+
+  {unidad:'ARC-05',patente:'AI063WC',v:85},
+
+  {unidad:'ARC-06',patente:'AH920LF',v:79},
+
+  {unidad:'ARC-07',patente:'AH920LE',v:55},
+
+];
+
+ 
+
+/* ════════════════════════════════════════
+
+   CONFIG
+
+════════════════════════════════════════ */
+
+function loadCfg() {
+
+  const s = localStorage.getItem('arce_cfg_v3');
+
+  if (s) CFG = {...CFG, ...JSON.parse(s)};
+
+  document.getElementById('c-alertas').value  = CFG.alertasUrl || '';
+
+  document.getElementById('c-flota').value    = CFG.flotaUrl   || '';
+
+  document.getElementById('c-icm').value      = CFG.icmUrl     || '';
+
+  document.getElementById('c-docs').value     = CFG.docsUrl    || '';
+
+  document.getElementById('c-interval').value = CFG.interval   || 60;
+
+}
+
+ 
+
+function saveCfg() {
+
+  CFG.alertasUrl = document.getElementById('c-alertas').value.trim();
+
+  CFG.flotaUrl   = document.getElementById('c-flota').value.trim();
+
+  CFG.icmUrl     = document.getElementById('c-icm').value.trim();
+
+  CFG.docsUrl    = document.getElementById('c-docs').value.trim();
+
+  CFG.interval   = parseInt(document.getElementById('c-interval').value) || 60;
+
+  localStorage.setItem('arce_cfg_v3', JSON.stringify(CFG));
+
+  toggleCfg();
+
+  startTimer();
+
+  loadData();
+
+}
+
+ 
+
+function toggleCfg() { document.getElementById('cfg').classList.toggle('open'); }
+
+ 
+
+function startTimer() {
+
+  if (timer) clearInterval(timer);
+
+  if (CFG.alertasUrl && CFG.interval > 0)
+
+    timer = setInterval(loadData, CFG.interval * 1000);
+
+}
+
+ 
+
+/* ════════════════════════════════════════
+
+   CARGA DE DATOS
+
+════════════════════════════════════════ */
+
+async function loadData() {
+
+  if (!CFG.alertasUrl) { loadDemo(); return; }
+
+  setLive('CARGANDO');
+
+  try {
+
+    const t = '&t=' + Date.now();
+
+    const fetches = [
+
+      fetch(CFG.alertasUrl + t).then(r => r.text()),
+
+      CFG.flotaUrl ? fetch(CFG.flotaUrl + t).then(r => r.text()) : Promise.resolve(''),
+
+      CFG.icmUrl   ? fetch(CFG.icmUrl   + t).then(r => r.text()) : Promise.resolve(''),
+
+      CFG.docsUrl  ? fetch(CFG.docsUrl  + t).then(r => r.text()) : Promise.resolve(''),
+
+    ];
+
+    const [ar, fr, ir, dr] = await Promise.all(fetches);
+
+    alertasData = ar ? parseCSV(ar) : [];
+
+    flotaData   = fr ? parseCSV(fr) : [];
+
+    icmData     = ir ? parseCSV(ir) : [];
+
+    docsData    = dr ? parseCSV(dr) : [];
+
+    render();
+
+    setLive('EN VIVO');
+
+    setTS();
+
+  } catch(e) {
+
+    console.error('Error cargando datos:', e);
+
+    setLive('ERROR');
+
+  }
+
+}
+
+ 
+
+/* ════════════════════════════════════════
+
+   CSV PARSER — normaliza headers
+
+════════════════════════════════════════ */
+
+function normKey(h) {
+
+  return h.replace(/"/g,'').trim()
+
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+
+    .toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+
+}
+
+ 
+
+const FMAP = {
+
+  timestamp:'timestamp', unidad:'unidad', patente:'patente', chofer:'chofer',
+
+  tipo_alerta:'tipo_alerta', severidad:'severidad', titulo:'titulo',
+
+  detalle:'detalle', ubicacion:'ubicacion', latitud:'lat', lat:'lat',
+
+  longitud:'lng', lng:'lng', url_mapa:'mapa_url', mapa_url:'mapa_url',
+
+  estado:'estado', procesado_en:'procesado_en',
+
+  ultima_alerta:'ultima_alerta', tipo_ultima_alerta:'tipo_alerta',
+
+  alertas_hoy:'alertas_hoy', actualizado:'actualizado',
+
+  // Documentación
+
+  patente_equipo:'patente_equipo', tipo_equipo:'tipo_equipo',
+
+  tipo_documento:'tipo_documento', descripcion:'descripcion',
+
+  fecha_vencimiento:'fecha_vencimiento', dias_restantes:'dias_restantes',
+
+  estado_doc:'estado_doc', responsable:'responsable',
+
+  // ICM
+
+  periodo:'periodo', icm:'icm', categoria_src:'categoria_src',
+
+  infracciones_velocidad:'inf_vel', infracciones_frenada:'inf_fren',
+
+  infracciones_giro:'inf_giro', infracciones_acel:'inf_acel',
+
+};
+
+ 
+
+function parseCSV(txt) {
+
+  if (!txt || !txt.trim()) return [];
+
+  const lines = txt.trim().split('\n');
+
+  const hdrs  = lines[0].split(',').map(h => {
+
+    const n = normKey(h);
+
+    return FMAP[n] || n;
+
+  });
+
+  return lines.slice(1).map(l => {
+
+    const vals = splitLine(l);
+
+    const o = {};
+
+    hdrs.forEach((h,i) => o[h] = (vals[i]||'').replace(/"/g,'').trim());
+
+    return o;
+
+  }).filter(r => Object.values(r).some(v => v !== ''));
+
+}
+
+ 
+
+function splitLine(l) {
+
+  const r=[]; let c=''; let q=false;
+
+  for (let i=0;i<l.length;i++) {
+
+    if (l[i]==='"') q=!q;
+
+    else if (l[i]===',' && !q) {r.push(c); c='';}
+
+    else c+=l[i];
+
+  }
+
+  r.push(c);
+
+  return r;
+
+}
+
+ 
+
+/* ════════════════════════════════════════
+
+   RENDER PRINCIPAL
+
+════════════════════════════════════════ */
+
+function render() {
+
+  renderKPIs();
+
+  renderFlota();
+
+  renderAlertasTable(filtroActual);
+
+  renderFeed();
+
+  renderICM();
+
+  renderMiniStats();
+
+  renderDocs();
+
+}
+
+ 
+
+/* ── KPIs ── */
+
+function renderKPIs() {
+
+  const hoy  = new Date().toISOString().slice(0,10);
+
+  const hoyA = alertasData.filter(a => (a.timestamp||'').startsWith(hoy));
+
+  const sev  = a => a.severidad || '';
+
+  const altas = hoyA.filter(a => sev(a) === 'ALTA');
+
+  const medias= hoyA.filter(a => sev(a) === 'MEDIA');
+
+ 
+
+  setText('k-alertas-hoy', hoyA.length || '0');
+
+  document.getElementById('k-alertas-chips').innerHTML =
+
+    `<span class="chip chip-r">${altas.length} altas</span>&nbsp;<span class="chip chip-a">${medias.length} medias</span>`;
+
+ 
+
+  const ultima = alertasData.length ? alertasData[alertasData.length-1] : null;
+
+  if (ultima) {
+
+    setText('k-ultima', ultima.tipo_alerta || '—');
+
+    document.getElementById('k-ultima-meta').innerHTML =
+
+      `<span class="mono">${ultima.patente||''}</span> · ${fmtTime(ultima.timestamp||'')}`;
+
+  }
+
+}
+
+ 
+
+/* ── FLOTA ── */
+
+function renderFlota() {
+
+  const hoy = new Date().toISOString().slice(0,10);
+
+  const tb  = document.getElementById('fleet-body');
+
+ 
+
+  tb.innerHTML = FLOTA_BASE.map(base => {
+
+    const sheet = flotaData.find(r => (r.patente||'').toUpperCase() === base.patente) || {};
+
+    const ultAl = alertasData
+
+      .filter(a => (a.patente||'').toUpperCase() === base.patente)
+
+      .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''))[0] || {};
+
+    const cnt = alertasData.filter(a =>
+
+      (a.patente||'').toUpperCase() === base.patente &&
+
+      (a.timestamp||'').startsWith(hoy)
+
+    ).length;
+
+ 
+
+    const sev   = sheet.severidad  || ultAl.severidad  || '';
+
+    const tipo  = sheet.tipo_alerta|| ultAl.tipo_alerta || '—';
+
+    const ts    = sheet.ultima_alerta || ultAl.timestamp || '';
+
+    const lat   = sheet.lat || ultAl.lat || '';
+
+    const lng   = sheet.lng || ultAl.lng || '';
+
+    const ubi   = sheet.ubicacion || ultAl.ubicacion || '—';
+
+    const chofer= sheet.chofer || ultAl.chofer || '—';
+
+    const mapH  = lat && lng ? `https://maps.google.com/maps?q=${lat},${lng}` : '';
+
+    const ubiS  = ubi.length > 28 ? ubi.slice(0,28)+'…' : ubi;
+
+ 
+
+    const sevCls = sev==='ALTA'?'pr':sev==='MEDIA'?'pa2':'pn';
+
+    const cntCls = cnt===0?'pg':cnt<=2?'pa2':'pr';
+
+    const tipoCls= tipo.toLowerCase().includes('velocidad')?'pr':
+
+                   tipo.toLowerCase().includes('giro')||tipo.toLowerCase().includes('frenada')?'pa2':'pb';
+
+ 
+
+    return `<tr>
+
+      <td><span class="chip chip-b" style="font-size:9px">${base.unidad}</span></td>
+
+      <td><span class="pat">${base.patente}</span></td>
+
+      <td style="font-size:11px">${chofer}</td>
+
+      <td class="mono" style="color:var(--text3);font-size:9px">${ts ? fmtTime(ts) : '—'}</td>
+
+      <td>${tipo!=='—'?`<span class="pill ${tipoCls}">${tipo}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+
+      <td>${sev?`<span class="pill ${sevCls}">${sev}</span>`:'—'}</td>
+
+      <td><span class="loc-text" title="${ubi}">${ubiS}</span></td>
+
+      <td><span class="pill ${cntCls}">${cnt}</span></td>
+
+      <td>${mapH?`<a class="map-link" href="${mapH}" target="_blank">↗</a>`:'—'}</td>
+
+    </tr>`;
+
+  }).join('');
+
+}
+
+ 
+
+/* ── ALERTAS TABLE ── */
+
+function renderAlertasTable(filtro) {
+
+  filtroActual = filtro;
+
+  let data = [...alertasData].reverse();
+
+  if (filtro==='alta')  data = data.filter(a => (a.severidad||'') === 'ALTA');
+
+  if (filtro==='media') data = data.filter(a => (a.severidad||'') === 'MEDIA');
+
+ 
+
+  const el = document.getElementById('alertas-container');
+
+  if (!data.length) {
+
+    el.innerHTML = '<div class="empty">Sin alertas en esta categoría</div>';
+
+    return;
+
+  }
+
+  el.innerHTML = `<table class="tbl">
+
+    <thead><tr>
+
+      <th>Timestamp</th><th>Patente</th><th>Chofer</th>
+
+      <th>Tipo</th><th>Severidad</th><th>Detalle</th>
+
+      <th>Ubicación</th><th>Estado</th><th>Mapa</th>
+
+    </tr></thead>
+
+    <tbody>${data.map(a => {
+
+      const sev = a.severidad||'';
+
+      const est = a.estado||'';
+
+      const lat = a.lat||''; const lng = a.lng||'';
+
+      const mapH= lat&&lng?`https://maps.google.com/maps?q=${lat},${lng}`:'';
+
+      const ubi = (a.ubicacion||'');
+
+      const ubiS= ubi.length>30?ubi.slice(0,30)+'…':(ubi||'—');
+
+      const sevCls=sev==='ALTA'?'pr':sev==='MEDIA'?'pa2':'pg';
+
+      const estCls=est==='Resuelta'?'pg':'pr';
+
+      const tipoCls=((a.tipo_alerta||'').toLowerCase().includes('velocidad'))?'pr':
+
+                    ((a.tipo_alerta||'').toLowerCase().includes('giro')||(a.tipo_alerta||'').toLowerCase().includes('frenada'))?'pa2':'pb';
+
+      return `<tr style="${est==='Resuelta'?'opacity:.4':''}">
+
+        <td class="mono" style="font-size:9px;color:var(--text3)">${fmtTS(a.timestamp||'')}</td>
+
+        <td><span class="pat">${a.patente||'—'}</span></td>
+
+        <td style="font-size:10px">${a.chofer||'—'}</td>
+
+        <td><span class="pill ${tipoCls}">${a.tipo_alerta||'—'}</span></td>
+
+        <td><span class="pill ${sevCls}">${sev||'—'}</span></td>
+
+        <td style="font-size:10px;color:var(--text3)">${(a.detalle||'').slice(0,45)}</td>
+
+        <td><span class="loc-text" title="${ubi}">${ubiS}</span></td>
+
+        <td><span class="pill ${estCls}">${est||'—'}</span></td>
+
+        <td>${mapH?`<a class="map-link" href="${mapH}" target="_blank">↗</a>`:'—'}</td>
+
+      </tr>`;
+
+    }).join('')}</tbody>
+
+  </table>`;
+
+}
+
+ 
+
+function filtrar(f, el) {
+
+  document.querySelectorAll('.pa-row .pa').forEach(b => b.style.color='');
+
+  el.style.color='var(--blue)';
+
+  renderAlertasTable(f);
+
+}
+
+ 
+
+/* ── FEED ── */
+
+function renderFeed() {
+
+  const el = document.getElementById('alert-feed');
+
+  const data = [...alertasData].reverse().slice(0,6);
+
+  if (!data.length) { el.innerHTML='<div class="empty" style="padding:8px">Sin alertas</div>'; return; }
+
+  const ico = t => {
+
+    if (!t) return {cls:'aib',i:'EV'};
+
+    const tl=t.toLowerCase();
+
+    if (tl.includes('velocidad')) return {cls:'air',i:'V!'};
+
+    if (tl.includes('giro'))      return {cls:'aia',i:'GR'};
+
+    if (tl.includes('frenada'))   return {cls:'aia',i:'FR'};
+
+    if (tl.includes('acel'))      return {cls:'aia',i:'AC'};
+
+    if (tl.includes('desvío')||tl.includes('desvio')) return {cls:'air',i:'DV'};
+
+    if (tl.includes('sos'))       return {cls:'air',i:'SOS'};
+
+    return {cls:'aib',i:'EV'};
+
+  };
+
+  el.innerHTML = data.map(a => {
+
+    const {cls,i} = ico(a.tipo_alerta||'');
+
+    const lat=a.lat||''; const lng=a.lng||'';
+
+    const mapH=lat&&lng?`https://maps.google.com/maps?q=${lat},${lng}`:'';
+
+    const sevCls=(a.severidad||'')==='ALTA'?'pr':(a.severidad||'')==='MEDIA'?'pa2':'pg';
+
+    return `<a class="ai" ${mapH?`href="${mapH}" target="_blank"`:'href="#" onclick="return false"'}>
+
+      <div class="ai-ico ${cls}">${i}</div>
+
+      <div class="ai-body">
+
+        <div class="ai-t">${a.tipo_alerta||'Evento'} — <span class="mono">${a.patente||''}</span></div>
+
+        <div class="ai-d">${a.chofer||''} ${(a.ubicacion||'').slice(0,35)}</div>
+
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+
+        <span class="ai-ts">${fmtTime(a.timestamp||'')}</span>
+
+        <span class="pill ${sevCls}" style="font-size:8px">${a.severidad||''}</span>
+
+      </div>
+
+    </a>`;
+
+  }).join('');
+
+}
+
+ 
+
+/* ── ICM ── */
+
+function renderICM() {
+
+  const el = document.getElementById('icm-list');
+
+  // Usar ICM del Sheet si hay datos, sino los manuales
+
+  let data = ICM_MANUAL;
+
+  if (icmData.length) {
+
+    const byUnit = {};
+
+    icmData.forEach(r => {
+
+      const u = r.unidad||''; const v = parseFloat(r.icm||0);
+
+      if (u && !isNaN(v)) byUnit[u] = {unidad:u, patente:r.patente||'', v:Math.round(v)};
+
+    });
+
+    if (Object.keys(byUnit).length) {
+
+      data = ICM_MANUAL.map(m => byUnit[m.unidad] ? {...m, v:byUnit[m.unidad].v} : m);
+
+    }
+
+  }
+
+  data = [...data].sort((a,b)=>b.v-a.v);
+
+  el.innerHTML = data.map(r => {
+
+    const col=r.v>=80?'var(--green)':r.v>=70?'var(--amber)':'var(--red)';
+
+    return `<div class="icm-row">
+
+      <div class="icm-name">${r.unidad} <span style="font-size:9px;color:var(--text3)">(${r.patente})</span></div>
+
+      <div class="icm-track"><div class="icm-f" style="width:${r.v}%;background:${col}"></div></div>
+
+      <div class="icm-num" style="color:${col}">${r.v}</div>
+
+    </div>`;
+
+  }).join('');
+
+}
+
+ 
+
+/* ── MINI STATS ── */
+
+function renderMiniStats() {
+
+  const hoy  = new Date().toISOString().slice(0,10);
+
+  const hoyA = alertasData.filter(a => (a.timestamp||'').startsWith(hoy));
+
+  const cnt  = t => hoyA.filter(a => (a.tipo_alerta||'').toLowerCase().includes(t)).length;
+
+  const giro=cnt('giro'), fren=cnt('frenada'), vel=cnt('velocidad'),
+
+        acel=cnt('acel'), desv=cnt('desvío')+cnt('desvio');
+
+  const otros=Math.max(0, hoyA.length-giro-fren-vel-acel-desv);
+
+  setText('ms-giro',   giro);
+
+  setText('ms-frenada',fren);
+
+  setText('ms-vel',    vel);
+
+  setText('ms-acel',   acel);
+
+  setText('ms-desvio', desv);
+
+  setText('ms-otros',  otros);
+
+}
+
+ 
+
+/* ════════════════════════════════════════
+
+   DOCS VENCIMIENTOS
+
+   Reglas:
+
+   - Vencido    → rojo
+
+   - ≤ 7 días   → rojo
+
+   - 8–15 días  → amarillo
+
+   - > 15 días  → NO mostrar en lista (solo conteo OK)
+
+════════════════════════════════════════ */
+
+function renderDocs() {
+
+  const hoy = new Date();
+
+ 
+
+  // Si no hay datos del Sheet, mostrar mensaje
+
+  if (!docsData.length) {
+
+    setText('dk-venc', '—');
+
+    setText('dk-7d',   '—');
+
+    setText('dk-15d',  '—');
+
+    setText('dk-ok',   '—');
+
+    setText('k-docs-criticos', '—');
+
+    document.getElementById('k-docs-meta').textContent = 'sin datos de documentación';
+
+    document.getElementById('venc-list').innerHTML =
+
+      '<div class="empty" style="padding:8px">Conectá la hoja Documentacion en <code>⚙ fuentes</code></div>';
+
+    return;
+
+  }
+
+ 
+
+  const vencidos=[], en7=[], en15=[], ok=[];
+
+ 
+
+  docsData.forEach(d => {
+
+    const fvRaw  = d.fecha_vencimiento || '';
+
+    const unidad = d.unidad || '';
+
+    const pat    = d.patente_equipo || d.patente || '';
+
+    const tipodoc= d.tipo_documento || '';
+
+    const desc   = d.descripcion || '';
+
+ 
+
+    // Ignorar filas sin fecha o sin unidad
+
+    if (!fvRaw || fvRaw === '—' || !unidad) return;
+
+ 
+
+    const fVenc = new Date(fvRaw);
+
+    if (isNaN(fVenc.getTime())) return;
+
+ 
+
+    const diff = Math.floor((fVenc - hoy) / 86400000);
+
+    const obj  = {unidad, pat, tipodoc, desc, diff, fvRaw};
+
+ 
+
+    if (diff < 0)       vencidos.push(obj);
+
+    else if (diff <= 7) en7.push(obj);
+
+    else if (diff <= 15) en15.push(obj);
+
+    else                ok.push(obj);
+
+  });
+
+ 
+
+  // Actualizar contadores
+
+  setText('dk-venc', vencidos.length);
+
+  setText('dk-7d',   en7.length);
+
+  setText('dk-15d',  en15.length);
+
+  setText('dk-ok',   ok.length);
+
+ 
+
+  // KPI superior
+
+  const criticos = vencidos.length + en7.length;
+
+  setText('k-docs-criticos', criticos);
+
+  document.getElementById('k-docs-meta').innerHTML =
+
+    criticos > 0
+
+      ? `<span class="chip chip-r">${vencidos.length} vencidos</span>&nbsp;<span class="chip chip-a">${en7.length} en ≤7 días</span>`
+
+      : `<span class="chip chip-g">Todo al día</span>`;
+
+ 
+
+  // Lista — solo vencidos y próximos (≤15 días)
+
+  const items = [
+
+    ...vencidos.map(d => ({
+
+      ...d,
+
+      color:  'var(--red)',
+
+      dotBg:  '#f05050',
+
+      label:  `VENCIDO hace ${Math.abs(d.diff)} día${Math.abs(d.diff)!==1?'s':''}`,
+
+    })),
+
+    ...en7.map(d => ({
+
+      ...d,
+
+      color:  'var(--red)',
+
+      dotBg:  '#f07050',
+
+      label:  `Vence en ${d.diff} día${d.diff!==1?'s':''}`,
+
+    })),
+
+    ...en15.map(d => ({
+
+      ...d,
+
+      color:  'var(--amber)',
+
+      dotBg:  '#f0a841',
+
+      label:  `Vence en ${d.diff} días`,
+
+    })),
+
+  ];
+
+ 
+
+  const el = document.getElementById('venc-list');
+
+ 
+
+  if (!items.length) {
+
+    el.innerHTML = `<div class="vi" style="justify-content:center">
+
+      <div class="vi-dot" style="background:var(--green)"></div>
+
+      <div style="font-size:11px;color:var(--green);font-weight:500">Todo al día — sin vencimientos próximos</div>
+
+    </div>`;
+
+    return;
+
+  }
+
+ 
+
+  el.innerHTML = items.map(i => `
+
+    <div class="vi">
+
+      <div class="vi-dot" style="background:${i.dotBg}"></div>
+
+      <div class="vi-body">
+
+        <div class="vi-title">${i.tipodoc} — <span class="mono">${i.pat}</span></div>
+
+        <div class="vi-sub">${i.desc} · ${i.unidad}</div>
+
+      </div>
+
+      <div class="vi-dias" style="color:${i.color}">${i.label}</div>
+
+    </div>`).join('');
+
+}
+
+ 
+
+/* ════════════════════════════════════════
+
+   DEMO DATA
+
+════════════════════════════════════════ */
+
+function loadDemo() {
+
+  alertasData = [
+
+    {timestamp:'2026-04-09T20:34:40',unidad:'ARC-07',patente:'AH920LE',chofer:'F. Vasconcelo',tipo_alerta:'Giro brusco',severidad:'MEDIA',detalle:'Evento recibido = AH920LE GIRO',ubicacion:'ARGENTINA, NEUQUÉN, AÑELO, RTA PROV 7',lat:'-38.587260',lng:'-68.355880',estado:'Activa'},
+
+    {timestamp:'2026-04-09T18:12:10',unidad:'ARC-04',patente:'AE468CL',chofer:'L. Méndez',tipo_alerta:'Exceso velocidad',severidad:'ALTA',detalle:'Evento recibido = AE468CL VELOCIDAD',ubicacion:'ARGENTINA, NEUQUÉN, RN 22 KM 380',lat:'-38.2100',lng:'-68.1500',estado:'Activa'},
+
+    {timestamp:'2026-04-09T17:45:00',unidad:'ARC-07',patente:'AH920LE',chofer:'F. Vasconcelo',tipo_alerta:'Frenada brusca',severidad:'MEDIA',detalle:'Evento recibido = AH920LE FRENADA',ubicacion:'ARGENTINA, NEUQUÉN, AÑELO',lat:'-38.58',lng:'-68.35',estado:'Resuelta'},
+
+    {timestamp:'2026-04-10T03:14:00',unidad:'ARC-03',patente:'AD751NF',chofer:'F. Vargas',tipo_alerta:'Giro brusco',severidad:'MEDIA',detalle:'Evento recibido = AD751NF GIRO',ubicacion:'ARGENTINA, LA PAMPA, GRAL ACHA',lat:'-38.01',lng:'-63.59',estado:'Activa'},
+
+    {timestamp:'2026-04-10T03:41:00',unidad:'ARC-03',patente:'AD751NF',chofer:'F. Vargas',tipo_alerta:'Aceleración brusca',severidad:'MEDIA',detalle:'Evento recibido = AD751NF ACELERACION',ubicacion:'ARGENTINA, LA PAMPA, CHACHARRAMENDI',lat:'-37.85',lng:'-63.72',estado:'Activa'},
+
+  ];
+
+ 
+
+  // Docs demo — para visualizar las 3 situaciones
+
+  const hoy = new Date();
+
+  const addDays = n => { const d=new Date(hoy); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+
+  docsData = [
+
+    {unidad:'ARC-04',patente_equipo:'AE468CL',tipo_equipo:'Camión',tipo_documento:'VTV',descripcion:'Verificación técnica vehicular',fecha_vencimiento:addDays(-5)},
+
+    {unidad:'ARC-07',patente_equipo:'AH920LE',tipo_equipo:'Camión',tipo_documento:'Seguro automotor',descripcion:'Póliza seguro tractora',fecha_vencimiento:addDays(4)},
+
+    {unidad:'ARC-01',patente_equipo:'AF206YP',tipo_equipo:'Camión',tipo_documento:'Matafuego',descripcion:'Matafuego x2 recarga',fecha_vencimiento:addDays(6)},
+
+    {unidad:'ARC-03',patente_equipo:'AD751NF',tipo_equipo:'Semi',tipo_documento:'VTV semirremolque',descripcion:'VTV semi',fecha_vencimiento:addDays(12)},
+
+    {unidad:'ARC-02',patente_equipo:'AF087FB',tipo_equipo:'Camión',tipo_documento:'Licencia conducir',descripcion:'Licencia cat. E — chofer',fecha_vencimiento:addDays(14)},
+
+    {unidad:'ARC-05',patente_equipo:'AI063WC',tipo_equipo:'Camión',tipo_documento:'Habilitación RNTRC',descripcion:'Habilitación transporte cargas',fecha_vencimiento:addDays(90)},
+
+    {unidad:'ARC-06',patente_equipo:'AH920LF',tipo_equipo:'Camión',tipo_documento:'Seguro automotor',descripcion:'Póliza seguro tractora',fecha_vencimiento:addDays(180)},
+
+  ];
+
+ 
+
+  flotaData=[];icmData=[];
+
+  render();
+
+  setLive('DEMO');
+
+  setTS();
+
+}
+
+ 
+
+/* ════════════════════════════════════════
+
+   UTILS
+
+════════════════════════════════════════ */
+
+function setText(id, val) {
+
+  const el = document.getElementById(id);
+
+  if (el) el.textContent = val;
+
+}
+
+ 
+
+function fmtTime(ts) {
+
+  if (!ts) return '—';
+
+  try {
+
+    const d=new Date(ts), now=new Date();
+
+    const diff=Math.floor((now-d)/60000);
+
+    if (diff<1)  return 'ahora';
+
+    if (diff<60) return `${diff}m`;
+
+    return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+
+  } catch { return ts; }
+
+}
+
+ 
+
+function fmtTS(ts) {
+
+  if (!ts) return '—';
+
+  try {
+
+    const d=new Date(ts);
+
+    return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})+' '+
+
+           d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+
+  } catch { return ts; }
+
+}
+
+ 
+
+function setLive(t) { const el=document.getElementById('live-lbl'); if(el) el.textContent=t; }
+
+function setTS() {
+
+  const n=new Date();
+
+  const el=document.getElementById('ts-lbl');
+
+  if (el) el.textContent=`act. ${n.getHours().toString().padStart(2,'0')}:${n.getMinutes().toString().padStart(2,'0')}:${n.getSeconds().toString().padStart(2,'0')}`;
+
+}
+
+ 
+
+/* ════════════════════════════════════════
+
+   INIT
+
+════════════════════════════════════════ */
+
+window.addEventListener('DOMContentLoaded', () => {
+
+  loadCfg();
+
+  if (CFG.alertasUrl) { loadData(); startTimer(); }
+
+  else loadDemo();
+
+});
+
+</script>
+
+</body>
+
+</html>
+
