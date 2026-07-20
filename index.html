@@ -597,7 +597,10 @@ textarea.paste-area:focus{outline:none;border-color:var(--rojo)}
         <button id="btn-test-gas" class="add-btn" style="padding:9px 18px;background:var(--negro)" onclick="testGasConnection()">Probar conexi&#243;n</button>
       </div>
       <div style="margin-top:10px;font-size:11px;color:var(--muted)">
-        La URL se guarda en el navegador (localStorage). Solo necesit&#225;s configurarla una vez por dispositivo.
+        La URL se guarda en el navegador (localStorage). Solo necesit&#225;s configurarla una vez por dispositivo.<br>
+        <strong style="color:var(--rojo)">&#9888; Si ves error CORS:</strong> verific&#225; que el WebApp est&#233; publicado con
+        <strong>Ejecutar como: Yo</strong> y <strong>Acceso: Cualquier usuario</strong>.
+        Cada vez que modific&#225;s el c&#243;digo GAS deb&#233;s crear una <em>nueva implementaci&#243;n</em> (no editar la existente).
       </div>
     </div>
   </div>
@@ -1526,13 +1529,20 @@ function gasCall(action, extra) {
     return Promise.reject(new Error('GAS_URL no configurada'));
   }
   var body = Object.assign({ action: action }, extra || {});
+  // IMPORTANTE: usamos POST + Content-Type: text/plain para evitar el preflight OPTIONS.
+  // Google Apps Script no responde correctamente al preflight, pero sí acepta
+  // POST text/plain desde cualquier origen cuando está publicado como "Cualquier usuario".
   return fetch(GAS_URL, {
-    method : 'POST',
-    mode   : 'cors',
-    headers: { 'Content-Type': 'text/plain' }, // text/plain evita preflight CORS
-    body   : JSON.stringify(body),
+    method      : 'POST',
+    redirect    : 'follow',
+    body        : JSON.stringify(body),
+    // Sin headers explícitos → Content-Type queda como text/plain;charset=UTF-8
+    // lo que evita el preflight y permite CORS simple cross-origin.
   })
-  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  })
   .then(function(data) {
     if (!data.ok) throw new Error(data.error || 'Error GAS');
     return data;
@@ -1545,19 +1555,27 @@ function testGasConnection() {
   if (!url) { toast('Ingresá la URL primero', 'w'); return; }
   setGasUrl(url);
   setGasBtnState('testing');
-  fetch(url + '?action=ping', { mode: 'cors' })
-    .then(function(r) { return r.json(); })
+  // POST text/plain — evita preflight CORS (GAS no maneja OPTIONS correctamente)
+  // El body vacío con action=ping es suficiente para verificar la conexión.
+  fetch(url, {
+    method  : 'POST',
+    redirect: 'follow',
+    body    : JSON.stringify({ action: 'ping' }),
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function(d) {
       if (d.ok) {
         setGasBtnState('ok');
         toast('Conexión exitosa con el WebApp', 's');
-        // Cargar escalas del Sheet
         cargarEscalasDesdeGAS();
-      } else throw new Error('Respuesta inesperada');
+      } else throw new Error(d.error || 'Respuesta inesperada');
     })
     .catch(function(e) {
       setGasBtnState('error');
-      toast('Error de conexión: ' + e.message, '');
+      toast('Error: ' + e.message + ' — Verificá que el WebApp esté publicado como "Cualquier usuario"', '');
     });
 }
 
@@ -1630,7 +1648,8 @@ var GAS_CODE = [
 "    var action = body.action;",
 "    var result;",
 "",
-"    if      (action === 'guardarVariables')  result = guardarVariablesMasivas(body.datos);",
+"    if      (action === 'ping')              result = { ok: true, msg: 'pong' };",
+"    else if (action === 'guardarVariables')  result = guardarVariablesMasivas(body.datos);",
 "    else if (action === 'obtenerDatosFijos') result = obtenerDatosFijos();",
 "    else if (action === 'actualizarDatoFijo') result = actualizarDatoFijo(body.chofer, body.datos);",
 "    else if (action === 'guardarHistorial')  result = guardarHistorial(body.registro);",
