@@ -1041,35 +1041,42 @@ function buildWorkbook(){
   tramosData.forEach(function(r){var dt=parseDate(r.fechaIn);if(dt){var k=dt.getFullYear()+'-'+(dt.getMonth()+1);mesCnt[k]=(mesCnt[k]||0)+1;}});
   var mesKey=Object.keys(mesCnt).sort(function(a,b){return mesCnt[b]-mesCnt[a];})[0]||'2026-6';
   var mp=mesKey.split('-'),mesYear=+mp[0],mesNum=+mp[1];
+  var periodo=getPeriodo(mesYear,mesNum);
   setP(20,'run','Calculando...');
   var resumen=[],arcorSheets=[];
   choferes.forEach(function(chofer){
-    var ch=tramosData.filter(function(r){return r.chofer===chofer;});
-    // KMs reales = TODOS
+    var chAll=tramosData.filter(function(r){return r.chofer===chofer;});
+    // Sólo se liquida lo que cae DENTRO del período 26→25 (el archivo trae días
+    // previos/posteriores únicamente para resolver continuidad de recorridos).
+    var ch=chAll.filter(function(r){return enPeriodo(parseDate(r.fechaIn),periodo);});
+    // KMs reales = TODOS (dentro del período)
     var kmReal=ch.reduce(function(s,r){return s+r.kmsSimples;},0);
     var kmCargados=ch.filter(function(r){return r.carga==='SI';}).reduce(function(s,r){return s+r.kmsSimples;},0);
     var kmVacios=ch.filter(function(r){return r.carga==='NO';}).reduce(function(s,r){return s+r.kmsSimples;},0);
     var kmA=Math.min(Math.round(kmReal*0.60),7000);
     var kmB=Math.round(kmReal-kmA);
-    var patente=(ch.find(function(r){return r.patente;})||{patente:''}).patente;
-    // KMs Arcor reales (solo CARGA=SI y cliente Arcor)
+    var patente=(ch.find(function(r){return r.patente;})||chAll.find(function(r){return r.patente;})||{patente:''}).patente;
+    // KMs Arcor reales (solo CARGA=SI y cliente Arcor), dentro del período
     var arcorRowsSI=ch.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
+    // Todos los tramos Arcor del chofer (sin filtrar por período) — sirve para
+    // resolver la continuidad con el mes anterior.
+    var arcorRowsSIAll=chAll.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
     var kmRealArcor=arcorRowsSI.reduce(function(s,r){return s+r.kmsSimples;},0);
     var trips=[],km100=0,kmArcorTotal=0;
     if(arcorRowsSI.length>0){
-      var res=buildArcorTrips(arcorRowsSI,mesYear,mesNum);
+      var res=buildArcorTrips(arcorRowsSI,arcorRowsSIAll,periodo);
       trips=res.trips;km100=res.km100;
       kmArcorTotal=trips.reduce(function(s,t){return s+t.km;},0);
     }
     resumen.push({chofer:chofer,kmReal:Math.round(kmReal),kmCargados:Math.round(kmCargados),kmVacios:Math.round(kmVacios),kmA:kmA,kmB:kmB,kmRealArcor:Math.round(kmRealArcor),km100:km100,kmArcorTotal:kmArcorTotal,patente:patente});
-    if(trips.length>0)arcorSheets.push({chofer:chofer,patente:patente,trips:trips,mesYear:mesYear,mesNum:mesNum});
+    if(trips.length>0)arcorSheets.push({chofer:chofer,patente:patente,trips:trips,mesYear:mesYear,mesNum:mesNum,periodo:periodo});
   });
   setP(55,'run','Hoja resumen...');
   var wsRes=buildResumenSheet(resumen,mesYear,mesNum);
   wb.SheetNames.push('Resumen KMs');wb.Sheets['Resumen KMs']=wsRes;
   setP(70,'run','Planillas por chofer...');
   arcorSheets.forEach(function(d){
-    var ws=buildChoferSheet(d.chofer,d.patente,d.trips,d.mesYear,d.mesNum);
+    var ws=buildChoferSheet(d.chofer,d.patente,d.trips,d.mesYear,d.mesNum,d.periodo);
     wb.SheetNames.push(d.chofer.substring(0,31));wb.Sheets[d.chofer.substring(0,31)]=ws;
   });
   wb._meta={choferes:choferes.length,conArcor:arcorSheets.length,
@@ -1080,17 +1087,31 @@ function buildWorkbook(){
   return wb;
 }
 
-function buildArcorTrips(arcorRows,mesYear,mesNum){
+function getPeriodo(mesYear,mesNum){
+  // La liquidación SIEMPRE corre del día 26 del mes anterior al día 25 del mes a liquidar.
+  return {start:new Date(mesYear,mesNum-2,26), end:new Date(mesYear,mesNum-1,25)};
+}
+function enPeriodo(dt,periodo){return dt&&dt>=periodo.start&&dt<=periodo.end;}
+
+function buildArcorTrips(arcorRows,arcorRowsAll,periodo){
   var trips=arcorRows.map(function(r){
     return {dt:parseDate(r.fechaIn),dtFin:parseDate(r.fechaFin),orig:normLoc(r.saleDE),dest:normLoc(r.llegaA),km:r.kmsSimples,tipo:'real',carga:'SI'};
   }).filter(function(t){return t.dt;});
   trips.sort(function(a,b){return a.dt-b.dt;});
   trips.forEach(function(t){if((!t.km||t.km===0)&&t.orig&&t.dest){var k=getKm(t.orig,t.dest);if(k)t.km=k;}});
   if(!trips.length)return {trips:[],km100:0};
-  if(normLoc(trips[0].orig)!=='RIO CUARTO'){
-    var kIni=getKm('RIO CUARTO',trips[0].orig)||0;
+  // Continuidad real: la posición previa del camión es el destino del último tramo
+  // registrado en el archivo ANTES del inicio del período (día 26), no siempre "RIO CUARTO".
+  // El archivo trae días previos justamente para poder resolver esta continuidad.
+  var prevRows=(arcorRowsAll||[]).map(function(r){
+    return {dt:parseDate(r.fechaIn),dest:normLoc(r.llegaA)};
+  }).filter(function(r){return r.dt&&r.dt<periodo.start;}).sort(function(a,b){return a.dt-b.dt;});
+  var prevLoc=prevRows.length?prevRows[prevRows.length-1].dest:'RIO CUARTO';
+  if(normLoc(trips[0].orig)!==prevLoc){
+    var kIni=getKm(prevLoc,trips[0].orig)||0;
     var dtIni=new Date(trips[0].dt);dtIni.setDate(dtIni.getDate()-1);
-    trips.unshift({dt:dtIni,orig:'RIO CUARTO',dest:trips[0].orig,km:kIni,tipo:'generado',carga:'NO'});
+    if(dtIni<periodo.start)dtIni=new Date(periodo.start);
+    trips.unshift({dt:dtIni,orig:prevLoc,dest:trips[0].orig,km:kIni,tipo:'generado',carga:'NO'});
   }
   var i=0;
   while(i<trips.length-1){
@@ -1104,12 +1125,15 @@ function buildArcorTrips(arcorRows,mesYear,mesNum){
   }
   var ult=trips[trips.length-1];
   var dtFin=ult.dtFin||ult.dt;
-  if(dtFin&&!(dtFin.getDate()>=23&&dtFin.getDate()<=25)&&normLoc(ult.dest)!=='RIO CUARTO'){
+  if(dtFin&&dtFin<periodo.end&&normLoc(ult.dest)!=='RIO CUARTO'){
     var kV=getKm(ult.dest,'RIO CUARTO')||0;
     var dtV=new Date(dtFin);dtV.setDate(dtV.getDate()+1);
+    if(dtV>periodo.end)dtV=new Date(periodo.end);
     trips.push({dt:dtV,orig:ult.dest,dest:'RIO CUARTO',km:kV,tipo:'generado_retorno',carga:'NO'});
   }
-  var km100=trips.filter(function(t){return t.tipo==='real'&&t.carga==='SI'&&t.dt&&esFeriadoOFinde(t.dt);}).reduce(function(s,t){return s+t.km;},0);
+  // KMs al 100%: TODOS los kms de sábado/domingo/feriado (reales o de posicionamiento),
+  // no solo los tramos "reales" con carga=SI.
+  var km100=trips.filter(function(t){return t.dt&&esFeriadoOFinde(t.dt)&&t.km>0;}).reduce(function(s,t){return s+t.km;},0);
   return {trips:trips,km100:km100};
 }
 
@@ -1175,13 +1199,17 @@ function buildResumenSheet(resumen,mesYear,mesNum){
   return ws;
 }
 
-function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
+function buildChoferSheet(chofer,plate,trips,mesYear,mesNum,periodo){
   var byDate={};
   trips.forEach(function(t){if(t.dt)byDate[t.dt.toDateString()]=t;});
   var fechas=trips.filter(function(t){return t.dt;}).map(function(t){return t.dt;});
   if(!fechas.length)return XLSX.utils.aoa_to_sheet([]);
-  var dtMin=new Date(mesYear,mesNum-1,1);
-  var dtMax=new Date(Math.max.apply(null,fechas));
+  periodo=periodo||getPeriodo(mesYear,mesNum);
+  // El período de liquidación SIEMPRE va del día 26 del mes anterior al día 25
+  // del mes en curso (30 días), independientemente de cuántos tramos reales
+  // tenga cada chofer. Esto asegura que siempre se generen las 2 quincenas.
+  var dtMin=new Date(periodo.start);
+  var dtMax=new Date(periodo.end);
   var days=[],cur=new Date(dtMin);
   while(cur<=dtMax){days.push({dt:new Date(cur),trip:byDate[cur.toDateString()]||null});cur.setDate(cur.getDate()+1);}
   var chunks=[];
@@ -1239,7 +1267,9 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
         row[5]={v:fmtDate(dt),t:'s',s:{font:DAT,border:rowBrd(6),alignment:ACn}};
         row[6]={v:trip.dest,t:'s',s:{font:DAT,border:rowBrd(7),alignment:ACn}};
         if(trip.km&&trip.km>0)row[7]={v:+trip.km,t:'n',s:{font:DAT,border:rowBrd(8),alignment:ACn}};
-        if(finde&&trip.tipo==='real'&&trip.carga==='SI'&&trip.km>0)
+        // Todo km de sábado/domingo/feriado va a la columna "Km. Recorridos al 100%",
+        // sea tramo real o de posicionamiento generado.
+        if(finde&&trip.km>0)
           row[13]={v:+trip.km,t:'n',s:{font:{name:'Calibri',sz:10,bold:true,color:{rgb:RC}},border:rowBrd(14),alignment:ACn}};
       }
       aoa.push(row);curRow++;
@@ -1539,13 +1569,16 @@ function gasCall(action, extra) {
     xhr.onload = function() {
       try {
         var data = JSON.parse(xhr.responseText);
+        console.log('[gasCall]', action, '→', data);
         if (!data.ok) reject(new Error(data.error || 'Error GAS'));
         else resolve(data);
       } catch(e) {
+        console.error('[gasCall] respuesta no-JSON de', action, ':', xhr.responseText);
         reject(new Error('Respuesta inválida: ' + xhr.responseText.substring(0, 100)));
       }
     };
     xhr.onerror = function() {
+      console.error('[gasCall] error de red en', action);
       reject(new Error('Error de red — verificá la URL y que el WebApp esté publicado'));
     };
     xhr.ontimeout = function() { reject(new Error('Timeout — GAS tardó demasiado')); };
@@ -1662,6 +1695,7 @@ var GAS_CODE = [
 "    else if (action === 'obtenerDatosFijos') result = obtenerDatosFijos();",
 "    else if (action === 'actualizarDatoFijo') result = actualizarDatoFijo(body.chofer, body.datos);",
 "    else if (action === 'guardarHistorial')  result = guardarHistorial(body.registro);",
+"    else if (action === 'guardarLiquidacionMasiva') result = guardarLiquidacionMasiva(body.registros);",
 "    else if (action === 'obtenerEscalas')    result = obtenerEscalas();",
 "    else result = { ok: false, error: 'Acción desconocida: ' + action };",
 "",
@@ -1778,6 +1812,38 @@ var GAS_CODE = [
 "    registro.neto    || 0,",
 "  ]);",
 "  return { ok: true };",
+"}",
+"",
+"// ── 6. guardarLiquidacionMasiva ────────────────────────────────────────",
+"// Agrega una fila a HISTORIAL por cada chofer liquidado (recibo calculado).",
+"// body.registros = [{periodo,chofer,empresa,tipo,km,km100,descargas,dias,",
+"//                     bono,descuento,remunerativo,noRemunerativo,totalDescuentos,neto}, ...]",
+"function guardarLiquidacionMasiva(registros) {",
+"  var ws = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_HIST);",
+"  if (!ws) return { ok: false, error: 'No existe la hoja ' + HOJA_HIST };",
+"  var guardados = 0;",
+"  (registros || []).forEach(function(r) {",
+"    ws.appendRow([",
+"      r.periodo || '',",
+"      r.chofer  || '',",
+"      r.empresa || '',",
+"      r.tipo    || '',",
+"      r.km      || 0,",
+"      r.km100   || 0,",
+"      r.descargas || 0,",
+"      r.dias    || 0,",
+"      r.bono    || 0,",
+"      r.descuento || 0,",
+"      r.remunerativo || 0,",
+"      r.noRemunerativo || 0,",
+"      r.totalDescuentos || 0,",
+"      r.neto    || 0,",
+"      new Date(),",
+"    ]);",
+"    guardados++;",
+"  });",
+"  SpreadsheetApp.flush();",
+"  return { ok: true, guardados: guardados };",
 "}",
 "",
 "// ── Helper ───────────────────────────────────────────────────────────",
@@ -2082,6 +2148,7 @@ function getReciboCSS(){
     '.recibo-copy:last-child{border-bottom:none}',
     '.copy-label{position:absolute;top:6px;right:12px;font-size:8pt;color:#888;font-style:italic}',
     '.rc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:3px}',
+    '.rc-logo{height:34px;width:auto;object-fit:contain}',
     '.rc-empresa{font-size:11pt;font-weight:700;text-transform:uppercase}',
     '.rc-empresa-sub{font-size:8.5pt;color:#555}',
     '.rc-cuit{font-size:9pt;font-weight:700;text-align:right}',
@@ -2168,18 +2235,34 @@ function parsePaste(){
 
 function guardarVariables(){
   if(!LIQ_DATA.length){toast('Calcul\u00e1 las liquidaciones primero','w');return;}
-  var datos=LIQ_DATA.map(function(d){
+  var datosFijos=LIQ_DATA.map(function(d){
     return {Chofer:d.chofer, KM:d.km, 'km 100':d.km100||0, Dias:d.dias, Bono:d.bono};
+  });
+  // Registro completo por chofer (esto es lo que realmente faltaba guardarse:
+  // antes sólo se actualizaban las columnas fijas de DATOS y nunca se
+  // persist\u00eda la liquidaci\u00f3n/recibo calculado en el HISTORIAL).
+  var registros=LIQ_DATA.map(function(d){
+    var c=calcNeto(d);
+    return {
+      periodo: ESCALAS.periodo||'', chofer:d.chofer, empresa:d.empresa||'',
+      tipo: LIQ_TIPO, km:d.km, km100:d.km100||0, descargas:d.descargas||0,
+      dias:d.dias, bono:d.bono||0, descuento:d.descuento||0,
+      remunerativo:Math.round(c.totalRem), noRemunerativo:Math.round(c.viatico+(d.bono||0)),
+      totalDescuentos:Math.round(c.totalDes), neto:Math.round(c.neto)
+    };
   });
   var btn=document.getElementById('btn-guardar-vars');
   if(btn){btn.disabled=true;btn.textContent='\u23f3 Guardando...';}
-  gasCall('guardarVariables',{datos:datos})
-    .then(function(r){
-      toast('\u2713 '+r.guardados+' registros guardados en el Sheet','s');
-      if(btn){btn.disabled=false;btn.textContent='\u2713 Guardar en Sheet';}
+  gasCall('guardarVariables',{datos:datosFijos})
+    .then(function(r1){
+      return gasCall('guardarLiquidacionMasiva',{registros:registros}).then(function(r2){
+        toast('\u2713 '+(r1.guardados||0)+' fijos + '+(r2.guardados||0)+' liquidaciones guardadas en el Sheet','s');
+        if(btn){btn.disabled=false;btn.textContent='\u2713 Guardar en Sheet';}
+      });
     })
     .catch(function(e){
-      toast('Error: '+e.message,'');
+      console.error('Error al guardar en el Sheet:', e);
+      toast('Error al guardar: '+e.message,'');
       if(btn){btn.disabled=false;btn.textContent='\u2713 Guardar en Sheet';}
     });
 }
@@ -2334,6 +2417,26 @@ function confirmarEscalas(){
     if(r.empresa&&!CHOFER_EMPRESA[r.chofer]) CHOFER_EMPRESA[r.chofer]=r.empresa;
   });
 
+  // Determinar el período de liquidación (26 del mes anterior → 25 del mes a liquidar).
+  // Se intenta primero a partir del texto "Período" (ej. "JUNIO 2026"); si no se puede
+  // interpretar, se usa el mes con más registros en el archivo cargado (mismo criterio
+  // que la hoja de Resumen KMs de Arcor).
+  var periodoCalc = parsePeriodoTexto(periodo);
+  if(!periodoCalc){
+    var mesCnt2={};
+    tramosData.forEach(function(r){var dt=parseDate(r.fechaIn);if(dt){var k=dt.getFullYear()+'-'+(dt.getMonth()+1);mesCnt2[k]=(mesCnt2[k]||0)+1;}});
+    var mesKey2=Object.keys(mesCnt2).sort(function(a,b){return mesCnt2[b]-mesCnt2[a];})[0]||'2026-6';
+    var mp2=mesKey2.split('-');
+    periodoCalc={mesYear:+mp2[0],mesNum:+mp2[1]};
+  }
+  var periodoRango=getPeriodo(periodoCalc.mesYear,periodoCalc.mesNum);
+  // El período del BÁSICO es el mes calendario completo (día 1 al último día del mes),
+  // NO el período de trayectos/kms (26→25). Sólo se prorratea si el chofer ingresó
+  // durante ese mes calendario.
+  var calMesIni=new Date(periodoCalc.mesYear,periodoCalc.mesNum-1,1);
+  var calMesFin=new Date(periodoCalc.mesYear,periodoCalc.mesNum,0); // último día del mes
+  var diasDelMes=calMesFin.getDate();
+
   // Calcular liquidaciones
   var choferes=[];
   tramosData.forEach(function(r){if(choferes.indexOf(r.chofer)<0)choferes.push(r.chofer);});
@@ -2341,12 +2444,15 @@ function confirmarEscalas(){
   LIQ_DATA=[];
 
   choferes.forEach(function(chofer){
-    var rows=tramosData.filter(function(r){return r.chofer===chofer;});
+    var rowsAll=tramosData.filter(function(r){return r.chofer===chofer;});
+    // Sólo lo que cae dentro del período 26→25 se liquida.
+    var rows=rowsAll.filter(function(r){return enPeriodo(parseDate(r.fechaIn),periodoRango);});
     var kmReal=rows.reduce(function(s,r){return s+r.kmsSimples;},0);
-    if(kmReal===0)return; // skip choferes sin km
+    if(kmReal===0)return; // skip choferes sin km en el período
     var kmA=Math.min(Math.round(kmReal*0.60),7000);
     var kmB=Math.round(kmReal-kmA);
     var arcorSI=rows.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
+    var arcorSIAll=rowsAll.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
     var kmArcorReal=arcorSI.reduce(function(s,r){return s+r.kmsSimples;},0);
 
     var km,descargas;
@@ -2356,6 +2462,15 @@ function confirmarEscalas(){
     } else {
       km=Math.round(kmArcorReal);
       descargas=Math.max(8,Math.ceil(km/800));
+    }
+
+    // KMs al 100% (sábado/domingo/feriado): se calculan igual que en la planilla
+    // de Arcor, generando la continuidad de tramos para no perder los kms de
+    // posicionamiento que caigan en fin de semana.
+    var km100=0;
+    if(arcorSI.length>0){
+      var resKm100=buildArcorTrips(arcorSI,arcorSIAll,periodoRango);
+      km100=resKm100.km100;
     }
 
     // Bono individual
@@ -2370,11 +2485,19 @@ function confirmarEscalas(){
     var fechaIngreso=(datosFlt.fechaIngreso||m.fechaIngreso||'');
     var legajo=(m.legajo||'');
 
+    // Días del básico = mes calendario completo, salvo que el chofer haya
+    // ingresado durante ese mismo mes (se prorratea desde la fecha de ingreso).
+    var dias=diasDelMes;
+    var dtIngreso=parseDate(fechaIngreso);
+    if(dtIngreso&&dtIngreso>=calMesIni&&dtIngreso<=calMesFin){
+      dias=calMesFin.getDate()-dtIngreso.getDate()+1;
+    }
+
     LIQ_DATA.push({
       chofer:chofer, kmA:kmA, kmB:kmB, kmReal:Math.round(kmReal),
       kmArcor:Math.round(kmArcorReal),
-      km:Math.round(km), descargas:descargas, dias:30,
-      bono:bono, descuento:0, km100:0,
+      km:Math.round(km), descargas:descargas, dias:dias,
+      bono:bono, descuento:0, km100:Math.round(km100),
       empresa:empresa, cuil:cuil,
       fechaIngreso:fechaIngreso, legajo:legajo,
       extras:JSON.parse(JSON.stringify(ITEMS_EXTRAS))
@@ -2382,6 +2505,15 @@ function confirmarEscalas(){
   });
 
   renderLiqTabla();
+}
+
+// Interpreta un texto de período tipo "JUNIO 2026" y devuelve {mesYear,mesNum} o null.
+function parsePeriodoTexto(periodo){
+  if(!periodo)return null;
+  var MESES={ENERO:1,FEBRERO:2,MARZO:3,ABRIL:4,MAYO:5,JUNIO:6,JULIO:7,AGOSTO:8,SEPTIEMBRE:9,OCTUBRE:10,NOVIEMBRE:11,DICIEMBRE:12};
+  var m=String(periodo).toUpperCase().match(/([A-ZÑ]+)\s+(\d{4})/);
+  if(!m||!MESES[m[1]])return null;
+  return {mesYear:+m[2], mesNum:MESES[m[1]]};
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2402,49 +2534,59 @@ function buildReciboHTML(d, c, fecha, tipo){
   }
 
   // Build concepto rows
+  // Regla: los \u00edtems en 0 no se muestran (no se agrega la fila), EXCEPTO el 060
+  // que siempre debe figurar con los Kms recorridos y su importe.
   var conceptos=[];
   // 001 Sueldo Basico
-  conceptos.push({cod:'001',desc:'Sueldo B\u00e1sico',       uni:numfmt(d.dias,2),  suj:numfmt(c.basico),  exe:'',des:''});
-  // 005 Remunerativo chofer (si hay km)
-  if(d.km>0)
-    conceptos.push({cod:'005',desc:'Remunerativo chofer', uni:numfmt(d.dias,2),  suj:numfmt(c.xkm),    exe:'',des:''});
-  // 060 Hs Ext X km Rec
-  conceptos.push({cod:'060',desc:'Hs.Ext X km. Rec.',   uni:'0,00', suj:'0,00',  exe:'',des:''});
-  // 062 Hs Ext X km 100
-  if(d.km100>0||true)
-    conceptos.push({cod:'062',desc:'Hs.Ext X km. 100',   uni:'0,00', suj:numfmt(c.xkm100||0), exe:'',des:''});
+  if(c.basico>0)
+    conceptos.push({cod:'001',desc:'Sueldo B\u00e1sico',       uni:numfmt(d.dias,2),  suj:numfmt(c.basico),  exe:'',des:''});
+  // 005 Remunerativo chofer = 10% del sueldo b\u00e1sico
+  if(c.bono_rem>0)
+    conceptos.push({cod:'005',desc:'Remunerativo chofer', uni:numfmt(d.dias,2),  suj:numfmt(c.bono_rem), exe:'',des:''});
+  // 060 Hs Ext X km Rec \u2014 SIEMPRE debe figurar con los Kms recorridos y el importe a liquidar
+  conceptos.push({cod:'060',desc:'Hs.Ext X km. Rec.',   uni:numfmt(d.km,2), suj:numfmt(c.xkm),  exe:'',des:''});
+  // 062 Hs Ext X km 100 (s\u00f3lo si hay kms al 100%)
+  if(d.km100>0)
+    conceptos.push({cod:'062',desc:'Hs.Ext X km. 100',   uni:numfmt(d.km100,2), suj:numfmt(c.xkm100||0), exe:'',des:''});
   // 061 Control Descarga
-  conceptos.push({cod:'061',desc:'Control Descarga',    uni:numfmt(d.descargas,2), suj:numfmt(c.xdesc), exe:'',des:''});
-  // 090 Antigüedad
-  conceptos.push({cod:'090',desc:'Antig. Item.6.1.5',   uni:'0,00', suj:'0,00', exe:'',des:''});
+  if(d.descargas>0)
+    conceptos.push({cod:'061',desc:'Control Descarga',    uni:numfmt(d.descargas,2), suj:numfmt(c.xdesc), exe:'',des:''});
   // SAC
-  if(ESCALAS.chkSAC)
+  if(ESCALAS.chkSAC&&c.sac>0)
     conceptos.push({cod:'099',desc:'SAC',               uni:'1,00', suj:numfmt(c.sac||0), exe:'',des:''});
-  // Ajuste período
+  // Ajuste per\u00edodo
   if(ESCALAS.chkAjuste)
     conceptos.push({cod:'099',desc:'Ajuste per\u00edodo',   uni:'1,00', suj:'0,00', exe:'',des:''});
   // 181 Viatico
-  conceptos.push({cod:'181',desc:'Viatico x Km. Cam.', uni:'0,00', suj:'', exe:numfmt(c.viatico), des:''});
+  if(c.viatico>0)
+    conceptos.push({cod:'181',desc:'Viatico x Km. Cam.', uni:'0,00', suj:'', exe:numfmt(c.viatico), des:''});
   // 183 Bono acuerdo
   if(d.bono>0)
     conceptos.push({cod:'183',desc:'Bono acuerdo cam.',  uni:'1,00', suj:'', exe:numfmt(d.bono), des:''});
-  // Día del camionero
-  if(ESCALAS.chkCam)
-    conceptos.push({cod:'184',desc:'D\u00eda del Camionero', uni:'1,00', suj:'', exe:numfmt(ESCALAS.extrasGlobal.find(function(e){return e.label==='DIA_CAM';})||{monto:0}).monto||0, des:''});
+  // D\u00eda del camionero
+  if(ESCALAS.chkCam){
+    var montoCam=(ESCALAS.extrasGlobal.find(function(e){return e.label==='DIA_CAM';})||{monto:0}).monto||0;
+    if(montoCam>0)
+      conceptos.push({cod:'184',desc:'D\u00eda del Camionero', uni:'1,00', suj:'', exe:numfmt(montoCam), des:''});
+  }
   // Items extras
   d.extras.forEach(function(ex){
+    if(!ex.monto)return;
     var cod=ex.tipo==='rem'?'199':ex.tipo==='nr'?'183':'300';
     conceptos.push({cod:cod,desc:ex.label,uni:'1,00',
       suj:ex.tipo==='rem'?numfmt(ex.monto):'',
       exe:ex.tipo==='nr'?numfmt(ex.monto):'',
       des:ex.tipo==='desc'?numfmt(ex.monto):''});
   });
-  // Retenciones
-  conceptos.push({cod:'300',desc:'Aporte Jubil. - 11%', uni:'',suj:'',exe:'',des:numfmt(c.jub)});
-  conceptos.push({cod:'301',desc:'Obra Social - 3%',    uni:'',suj:'',exe:'',des:numfmt(c.obraSoc)});
-  conceptos.push({cod:'303',desc:'I.N.S.S.J.P - 3%',   uni:'',suj:'',exe:'',des:numfmt(c.inssjp)});
-  conceptos.push({cod:'340',desc:'Seg. Sepelio Cam.',   uni:'',suj:'',exe:'',des:numfmt(c.sepelio)});
-  conceptos.push({cod:'341',desc:'Cuota Federac. Cam.', uni:numfmt(d.dias,2),suj:'',exe:'',des:numfmt(c.cuotaDes)});
+  // Retenciones (s\u00f3lo si el importe es mayor a 0)
+  if(c.jub>0)      conceptos.push({cod:'300',desc:'Aporte Jubil. - 11%', uni:'',suj:'',exe:'',des:numfmt(c.jub)});
+  if(c.obraSoc>0)  conceptos.push({cod:'301',desc:'Obra Social - 3%',    uni:'',suj:'',exe:'',des:numfmt(c.obraSoc)});
+  if(c.inssjp>0)   conceptos.push({cod:'303',desc:'I.N.S.S.J.P - 3%',   uni:'',suj:'',exe:'',des:numfmt(c.inssjp)});
+  if(c.sepelio>0)  conceptos.push({cod:'340',desc:'Seg. Sepelio Cam.',   uni:'',suj:'',exe:'',des:numfmt(c.sepelio)});
+  if(c.cuotaDes>0) conceptos.push({cod:'341',desc:'Cuota Federac. Cam.', uni:numfmt(d.dias,2),suj:'',exe:'',des:numfmt(c.cuotaDes)});
+  if(c.cc>0)       conceptos.push({cod:'342',desc:'Cuota Sindical Cam.', uni:'',suj:'',exe:'',des:numfmt(c.cc)});
+  if(d.descuento>0)
+    conceptos.push({cod:'399',desc:'Descuento',         uni:'',suj:'',exe:'',des:numfmt(d.descuento)});
   conceptos.push({cod:'342',desc:'Cuota Sindical Cam.', uni:'',suj:'',exe:'',des:numfmt(c.cc)});
   if(d.descuento>0)
     conceptos.push({cod:'399',desc:'Descuento',         uni:'',suj:'',exe:'',des:numfmt(d.descuento)});
@@ -2463,14 +2605,19 @@ function buildReciboHTML(d, c, fecha, tipo){
   var fechaLiqStr=fecha; // DD/MM/YYYY
   var lugarFecha='R\u00edo Cuarto, Cor., '+fechaLiqStr;
 
+  var logoSrc=(document.querySelector('header .hi img')||{}).src||'';
+
   function oneCopy(copyLabel){
     return '<div class="recibo-copy">'
       +'<span class="copy-label">'+copyLabel+'</span>'
-      // Cabecera empresa
+      // Cabecera empresa (con logo institucional)
       +'<div class="rc-top">'
-        +'<div>'
-          +'<div class="rc-empresa">'+emp.razon+'</div>'
-          +'<div class="rc-empresa-sub">'+emp.domicilio+'&nbsp;&nbsp;&nbsp;'+emp.ciudad+'</div>'
+        +'<div style="display:flex;align-items:center;gap:8px">'
+          +(logoSrc?'<img src="'+logoSrc+'" class="rc-logo" alt="Arce">':'')
+          +'<div>'
+            +'<div class="rc-empresa">'+emp.razon+'</div>'
+            +'<div class="rc-empresa-sub">'+emp.domicilio+'&nbsp;&nbsp;&nbsp;'+emp.ciudad+'</div>'
+          +'</div>'
         +'</div>'
         +'<div class="rc-cuit">CUIT&nbsp;&nbsp;'+emp.cuit+'</div>'
       +'</div>'
