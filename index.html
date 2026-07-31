@@ -692,23 +692,39 @@ var MAESTRO_EMPLEADOS = {"AGUERO MAURICIO RAMON": {"fechaIngreso": "09/03/2026",
 
 // CHOFER_EMPRESA se llena desde el maestro automáticamente
 var CHOFER_EMPRESA = {};
+var MAESTRO_GAS_LOADED = false; // flag: true cuando cargarMaestroDesdeGAS termina
+
+function normNombre_(s){
+  return String(s||'').trim().toUpperCase()
+    .replace(/\s+/g,' ')
+    .replace(/[ÁÀÂÄ]/g,'A').replace(/[ÉÈÊË]/g,'E')
+    .replace(/[ÍÌÎÏ]/g,'I').replace(/[ÓÒÔÖ]/g,'O')
+    .replace(/[ÚÙÛÜ]/g,'U').replace(/Ñ/g,'N');
+}
 
 function getMaestro(chofer) {
   if(!chofer) return null;
-  var name = String(chofer).trim().toUpperCase().replace(/\s+/g,' ');
-  // 1. Búsqueda exacta directa
-  if(MAESTRO_EMPLEADOS[name]) return MAESTRO_EMPLEADOS[name];
-  // 2. Búsqueda case-insensitive normalizada
+  var name = normNombre_(chofer);
+  // 1. Exacto con normalización de acentos/espacios
   var keys = Object.keys(MAESTRO_EMPLEADOS);
   for(var i=0;i<keys.length;i++){
-    if(keys[i].trim().toUpperCase().replace(/\s+/g,' ') === name)
-      return MAESTRO_EMPLEADOS[keys[i]];
+    if(normNombre_(keys[i]) === name) return MAESTRO_EMPLEADOS[keys[i]];
   }
-  // 3. Búsqueda parcial (por si el informe trae apellido truncado o con tilde diferente)
+  // 2. Parcial (informe puede traer nombre truncado)
   for(var j=0;j<keys.length;j++){
-    var k = keys[j].trim().toUpperCase().replace(/\s+/g,' ');
+    var k = normNombre_(keys[j]);
     if(k.indexOf(name)>=0 || name.indexOf(k)>=0) return MAESTRO_EMPLEADOS[keys[j]];
   }
+  // 3. Palabras clave: coincidencia del 70%+ de palabras
+  var palabras = name.split(' ').filter(function(p){return p.length>2;});
+  var mejorIdx=-1, mejorScore=0;
+  for(var m=0;m<keys.length;m++){
+    var kk=normNombre_(keys[m]);
+    var matches=palabras.filter(function(p){return kk.indexOf(p)>=0;}).length;
+    var score=matches/palabras.length;
+    if(score>0.6 && score>mejorScore){mejorScore=score;mejorIdx=m;}
+  }
+  if(mejorIdx>=0) return MAESTRO_EMPLEADOS[keys[mejorIdx]];
   return null;
 }
 
@@ -1197,12 +1213,23 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
   var dtMax=new Date(Math.max.apply(null,fechas));
   var days=[],cur=new Date(dtMin);
   while(cur<=dtMax){days.push({dt:new Date(cur),trip:byDate[cur.toDateString()]||null});cur.setDate(cur.getDate()+1);}
+  // Siempre generar exactamente 2 bloques de 16 días para un mes estándar
+  // Bloque 1: días 1-16, Bloque 2: días 17-último del mes
   var chunks=[];
-  for(var ci=0;ci<days.length;ci+=DATA_ROWS){
-    var ch=days.slice(ci,ci+DATA_ROWS);
-    while(ch.length<DATA_ROWS){var ld=ch[ch.length-1].dt;var nd=new Date(ld);nd.setDate(nd.getDate()+1);ch.push({dt:nd,trip:null});}
-    chunks.push(ch);
+  var diasMes=new Date(mesYear,mesNum,0).getDate(); // último día del mes
+  var allDays=[];
+  for(var dd=1;dd<=diasMes;dd++){
+    var ddt=new Date(mesYear,mesNum-1,dd);
+    allDays.push({dt:ddt,trip:byDate[ddt.toDateString()]||null});
   }
+  // Bloque 1: días 1 a 16
+  var b1=allDays.slice(0,16);
+  while(b1.length<DATA_ROWS){var ld=b1[b1.length-1].dt;var nd=new Date(ld);nd.setDate(nd.getDate()+1);b1.push({dt:nd,trip:null});}
+  chunks.push(b1);
+  // Bloque 2: días 17 en adelante
+  var b2=allDays.slice(16);
+  while(b2.length<DATA_ROWS){var ld2=b2.length?b2[b2.length-1].dt:new Date(mesYear,mesNum-1,17);var nd2=new Date(ld2);nd2.setDate(nd2.getDate()+1);b2.push({dt:nd2,trip:null});}
+  chunks.push(b2);
   var aoa=[],merges=[],curRow=0,totalRows=[],dataRanges=[];
   var BIG={name:'Calibri',sz:11,bold:true};
   var BIGT={name:'Calibri',sz:11,bold:true,color:{rgb:BC}};
@@ -1217,12 +1244,12 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
     r1[7]={v:'ITEMS: 4.2.3; 4.2.4; 4.2.6',t:'s',s:{font:BIG,alignment:AL}};
     aoa.push(r1);merges.push({s:{r:curRow,c:1},e:{r:curRow,c:6}});merges.push({s:{r:curRow,c:7},e:{r:curRow,c:13}});curRow++;
     var r2=emptyRow14();
-    r2[1]={v:'Nombre de la Firma Empleadora y/o Empleador: TRANSPORTE ARCE HNOS SA',t:'s',s:{font:BIG,alignment:AL}};
+    var _mae=getMaestro(chofer)||{}; var _emp=getEmpresa(chofer)||{razon:'TRANSPORTE ARCE HNOS SA',cuit:'30-71535215-6'}; r2[1]={v:'Nombre de la Firma Empleadora: '+_emp.razon+' — CUIT: '+_emp.cuit,t:'s',s:{font:BIG,alignment:AL}};
     r2[7]={v:bi+1,t:'n',s:{font:BIG,alignment:AL}};r2[8]={v:'N\u00b0 '+(bi+1),t:'s',s:{font:BIG,alignment:AL}};
     aoa.push(r2);merges.push({s:{r:curRow,c:1},e:{r:curRow,c:6}});merges.push({s:{r:curRow,c:8},e:{r:curRow,c:13}});curRow++;
     var r3=emptyRow14();
     r3[1]={v:'Nombre del Conductor:',t:'s',s:{font:BIG,alignment:AL}};
-    r3[3]={v:chofer,t:'s',s:{font:BIG,alignment:AL}};r3[5]={v:'CUIT:',t:'s',s:{font:BIG,alignment:AL}};
+    r3[3]={v:chofer,t:'s',s:{font:BIG,alignment:AL}};var _cuil=getMaestro(chofer)&&getMaestro(chofer).cuil||''; r3[5]={v:'CUIL Trabajador:',t:'s',s:{font:BIG,alignment:AL}}; r3[6]={v:_cuil,t:'s',s:{font:BIG,alignment:AL}};
     r3[8]={v:'N\u00b0 de Patente del Camion:',t:'s',s:{font:BIG,alignment:AL}};r3[10]={v:plate,t:'s',s:{font:BIG,alignment:AL}};
     aoa.push(r3);curRow++;
     aoa.push(emptyRow14());aoa.push(emptyRow14());curRow+=2;
@@ -1252,7 +1279,10 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
         row[5]={v:fmtDate(dt),t:'s',s:{font:DAT,border:rowBrd(6),alignment:ACn}};
         row[6]={v:trip.dest,t:'s',s:{font:DAT,border:rowBrd(7),alignment:ACn}};
         if(trip.km&&trip.km>0)row[7]={v:+trip.km,t:'n',s:{font:DAT,border:rowBrd(8),alignment:ACn}};
-        if(finde&&trip.tipo==='real'&&trip.carga==='SI'&&trip.km>0)
+        // Km al 100%: finde O feriado, con viaje real con carga
+        // Usar la fecha del DÍA de la planilla (dt) no del viaje para evitar desfases de zona horaria
+        var esFinde100 = esFeriadoOFinde(dt);
+        if(esFinde100 && trip.km>0)
           row[13]={v:+trip.km,t:'n',s:{font:{name:'Calibri',sz:10,bold:true,color:{rgb:RC}},border:rowBrd(14),alignment:ACn}};
       }
       aoa.push(row);curRow++;
@@ -1669,7 +1699,8 @@ function cargarMaestroDesdeGAS() {
         actualizados++;
       });
 
-      console.log('Maestro actualizado desde Sheet: ' + actualizados + ' empleados');
+      MAESTRO_GAS_LOADED = true;
+      console.log('Maestro actualizado desde Sheet: ' + actualizados + ' empleados. CUIL Aguero: ' + (MAESTRO_EMPLEADOS['AGUERO MAURICIO RAMON']||{}).cuil);
       // Re-evaluar faltantes con el maestro actualizado
       if(tramosData) checkChoferesFaltantes();
     })
@@ -1943,30 +1974,64 @@ function confirmarEscalas(){
     // Arcor planilla total (reutiliza lógica ya calculada si existe en resumen)
     var arcorSI=rows.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
     var kmArcorReal=arcorSI.reduce(function(s,r){return s+r.kmsSimples;},0);
-    // Usar el valor de kmArcorTotal del resumen si está disponible
-    var kmArcorPlan=kmArcorReal; // fallback
-    if(resultWB&&resultWB._meta) {
-      // no podemos acceder al desglose por chofer aquí fácil, usamos arcorReal
+
+    // Detectar mes del período
+    var mesCnt={};
+    rows.forEach(function(r){var dt=parseDate(r.fechaIn);if(dt){var k=dt.getFullYear()+'-'+(dt.getMonth()+1);mesCnt[k]=(mesCnt[k]||0)+1;}});
+    var mesKey=Object.keys(mesCnt).sort(function(a,b){return mesCnt[b]-mesCnt[a];})[0]||'2026-6';
+    var mp=mesKey.split('-'),mesYearC=+mp[0],mesNumC=+mp[1];
+
+    // Calcular trips Arcor (con posicionamiento) para obtener km total real y km100
+    var resArcor={trips:[],km100:0};
+    var trips=[];
+    if(arcorSI.length>0){
+      resArcor=buildArcorTrips(arcorSI,mesYearC,mesNumC);
+      trips=resArcor.trips;
     }
 
-    var km, descargas;
+    var km, descargas, km100=0, kmArcorTotal=0;
     if(LIQ_TIPO==='A'){
       km=kmA;
       descargas=Math.floor(km/1000);
+      // km100 para tipo A: todos los km del mes en finde/feriados
+      km100=rows.filter(function(r){
+        var dt=parseDate(r.fechaIn); return dt&&esFeriadoOFinde(dt);
+      }).reduce(function(s,r){return s+r.kmsSimples;},0);
     } else {
-      km=kmArcorReal; // KMs arcor (planilla)
-      descargas=Math.max(8, Math.ceil(km/800));
+      // KMs Totales Planilla Arcor (reales + posicionamiento generado)
+      if(trips.length>0){
+        kmArcorTotal=trips.reduce(function(s,t){return s+t.km;},0);
+        km=Math.round(kmArcorTotal);
+        km100=resArcor.km100||0;
+      } else {
+        km=Math.round(kmArcorReal);
+        km100=0;
+      }
+      descargas=Math.max(8,Math.ceil(km/800));
     }
 
     var dias=30; // default — editable
-    var bono=30000;
+    // Bono según configuración del período
+    var bonoTipo=ESCALAS.bonoTipo||'no';
+    var bono=bonoTipo==='fijo'?(ESCALAS.bonoFijo||0):0;
     var descuento=0;
+
+    // Datos del maestro
+    var m=getMaestro(chofer)||{};
+    var empresa=(m.empresa||CHOFER_EMPRESA[chofer]||'TRANSPORTE ARCE HNOS SA');
+    var cuil=(m.cuil||'');
+    var fechaIngreso=(m.fechaIngreso||'');
+    var legajo=(m.legajo||'');
 
     LIQ_DATA.push({
       chofer:chofer, kmA:kmA, kmB:kmB, kmReal:Math.round(kmReal),
       kmArcor:Math.round(kmArcorReal),
+      kmArcorTotal:Math.round(kmArcorTotal||km),
       km:Math.round(km), descargas:descargas, dias:dias,
-      bono:bono, descuento:descuento
+      bono:bono, descuento:descuento, km100:km100,
+      empresa:empresa, cuil:cuil,
+      fechaIngreso:fechaIngreso, legajo:legajo,
+      extras:JSON.parse(JSON.stringify(ITEMS_EXTRAS||[]))
     });
   });
 
@@ -2031,26 +2096,49 @@ function calcNeto(d){
   var descVal  = ESCALAS.descargas|| 42378.71;
   var cuota    = ESCALAS.cuotaAfil|| 20341.78;
 
-  var xkm      = kmVal * d.km;
-  var xkm100   = kmVal * 2 * (d.km100||0);
-  var xdesc    = descVal * d.descargas;
-  var bono_rem = basico * 0.10;
-  var totalRem = (basico/30)*d.dias + xkm + xkm100 + xdesc + bono_rem;
-  var viatico  = xkm + xkm100;
-  var bono_nr  = d.bono;
+  // km = km días normales (excluye finde/feriados)
+  // km100 = km finde/feriados
+  var kmNormal  = d.km;                    // días hábiles
+  var kmFinde   = d.km100||0;              // sábados/domingos/feriados
+  var kmTotal   = kmNormal + kmFinde;      // total mes (para viático)
+
+  // 001 Básico proporcional a días
+  var cod001 = (basico/30)*d.dias;
+  // 005 Remunerativo chofer = 10% del básico mensual
+  var cod005 = basico * 0.10;
+  // 060 Hs.Ext x km Rec. = km normales × tarifa
+  var cod060 = kmVal * kmNormal;
+  // 062 Hs.Ext x km 100 = km finde × tarifa × 2
+  var cod062 = kmVal * 2 * kmFinde;
+  // 061 Control Descarga
+  var cod061 = descVal * d.descargas;
+  // 090 Antigüedad (si aplica)
+  var cod090 = d.antiguedad||0;
+
+  var totalRem = cod001 + cod005 + cod060 + cod062 + cod061 + cod090;
+
+  // 181 Viático = km totales × tarifa (días normales + finde)
+  var viatico  = kmVal * kmTotal;
+  // 183 Bono NR
+  var bono_nr  = d.bono||0;
+
   var jub      = totalRem * 0.11;
   var obraSoc  = totalRem * 0.03;
   var inssjp   = totalRem * 0.03;
   var cc       = totalRem * 0.03;
   var sepelio  = totalRem * 0.015;
   var cuotaDes = (cuota/30)*d.dias;
-  var totalDes = jub+obraSoc+inssjp+cc+sepelio+cuotaDes+d.descuento;
+  var descAdi  = d.descuento||0;
+  var totalDes = jub+obraSoc+inssjp+cc+sepelio+cuotaDes+descAdi;
   var neto     = totalRem + viatico + bono_nr - totalDes;
-  return {basico:(basico/30)*d.dias, xkm:xkm, xkm100:xkm100, xdesc:xdesc,
-          bono_rem:bono_rem, totalRem:totalRem,
-          viatico:viatico, bono_nr:bono_nr,
-          jub:jub, obraSoc:obraSoc, inssjp:inssjp, cc:cc, sepelio:sepelio, cuotaDes:cuotaDes,
-          totalDes:totalDes, neto:neto};
+  return {
+    cod001:cod001, cod005:cod005, cod060:cod060, cod062:cod062,
+    cod061:cod061, cod090:cod090, totalRem:totalRem,
+    viatico:viatico, bono_nr:bono_nr,
+    jub:jub, obraSoc:obraSoc, inssjp:inssjp, cc:cc, sepelio:sepelio,
+    cuotaDes:cuotaDes, descAdi:descAdi, totalDes:totalDes, neto:neto,
+    kmNormal:kmNormal, kmFinde:kmFinde, kmTotal:kmTotal
+  };
 }
 
 // ── Imprimir recibos ──────────────────────────────────────────────────
@@ -2077,43 +2165,202 @@ function renderOneRecibo(idx){
   document.getElementById('recibo-print-area').innerHTML=buildReciboHTML(d,c,fmtFecha,tipo);
 }
 
-function buildReciboHTML(d,c,fecha,tipo){
-  function fmt(n){return n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});}
-  function row(label,val,cls){
-    return '<div class="rp-row"><span class="rp-label">'+label+'</span><span class="rp-val'+(cls?' '+cls:'')+'">'+(typeof val==='string'?val:'$'+fmt(val))+'</span></div>';
+
+// ── Número a letras (pesos argentinos) ───────────────────────────────
+var _unidades=['','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve',
+  'diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve'];
+var _decenas=['','','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+var _centenas=['','ciento','doscientos','trescientos','cuatrocientos','quinientos',
+  'seiscientos','setecientos','ochocientos','novecientos'];
+function _miles(n){
+  if(n===0)return '';
+  if(n===1)return 'mil ';
+  return _conv(n)+' mil ';
+}
+function _conv(n){
+  if(n===0)return '';
+  if(n===100)return 'cien';
+  if(n<20)return _unidades[n];
+  if(n<100){
+    var d=Math.floor(n/10),u=n%10;
+    return d===2&&u>0?'veinti'+_unidades[u]:_decenas[d]+(u?' y '+_unidades[u]:'');
   }
-  return '<div class="recibo-print">'
-    +'<div class="rp-header">'
-    +'<div><div class="rp-empresa">TRANSPORTE ARCE HNOS. S.A.</div>'
-    +'<div style="font-size:10px;color:#666;margin-top:3px">Liquidaci\u00f3n de Haberes \u2014 '+tipo+'</div></div>'
-    +'<div class="rp-meta">Fecha: '+fecha+'<br>Per\u00edodo: '+d.dias+' d\u00edas</div>'
-    +'</div>'
-    +'<h3>'+d.chofer+'</h3>'
-    +'<div class="rp-section-title">Remunerativo sujeto a retenci\u00f3n</div>'
-    +row('B\u00e1sico ('+d.dias+' d\u00edas)',c.basico)
-    +row('x KM ('+d.km.toLocaleString('es-AR')+' km)',c.xkm)
-    +(c.xkm100>0?row('x KM al 100%',c.xkm100):'')
-    +row('Descargas ('+d.descargas+')',c.xdesc)
-    +row('Bono (10% b\u00e1sico)',c.bono_rem)
-    +'<div class="rp-row subtotal"><span class="rp-label">Total Remunerativo</span><span class="rp-val">$'+fmt(c.totalRem)+'</span></div>'
-    +'<div class="rp-section-title">No remunerativo</div>'
-    +row('Vi\u00e1tico',c.viatico)
-    +row('Bono no remunerativo',c.bono_nr)
-    +'<div class="rp-section-title">Descuentos</div>'
-    +row('Jubilaci\u00f3n (11%)',c.jub,'neg')
-    +row('Obra Social (3%)',c.obraSoc,'neg')
-    +row('INSSJP (3%)',c.inssjp,'neg')
-    +row('CC 40/89 (3%)',c.cc,'neg')
-    +row('Seg. Sepelio (1.5%)',c.sepelio,'neg')
-    +row('Cuota Afiliaci\u00f3n',c.cuotaDes,'neg')
-    +(d.descuento>0?row('Descuento adicional',d.descuento,'neg'):'')
-    +'<div class="rp-row subtotal"><span class="rp-label">Total Descuentos</span><span class="rp-val neg">$'+fmt(c.totalDes)+'</span></div>'
-    +'<div class="rp-row neto"><span>NETO A COBRAR</span><span>$'+fmt(c.neto)+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;margin-top:28px;font-size:10px;color:#aaa">'
-    +'<span>_________________________<br>Firma Empleador</span>'
-    +'<span>_________________________<br>Firma Trabajador</span>'
-    +'</div>'
+  var c=Math.floor(n/100),r=n%100;
+  return _centenas[c]+(r?' '+_conv(r):'');
+}
+function numeroEnLetras(monto){
+  var entero=Math.floor(monto);
+  var centavos=Math.round((monto-entero)*100);
+  var s='';
+  if(entero>=1000000){var m=Math.floor(entero/1000000);s+=(m===1?'un millón ':_conv(m)+' millones ');entero%=1000000;}
+  if(entero>=1000){var mil=Math.floor(entero/1000);s+=_miles(mil);entero%=1000;}
+  s+=_conv(entero);
+  s=s.trim()||'cero';
+  return 'Son pesos '+s.charAt(0).toUpperCase()+s.slice(1)+' con '+String(centavos).padStart(2,'0')+'/100';
+}
+
+// ── Cuarto día hábil del mes ──────────────────────────────────────────
+function cuartoDiaHabil(year, month) {
+  // Feriados fijos (formato MM-DD)
+  var fijos=['01-01','03-24','04-02','05-01','05-25','06-20','07-09','08-17','10-12','11-23','12-08','12-25'];
+  var habiles=0;
+  for(var d=1;d<=31;d++){
+    var dt=new Date(year,month-1,d);
+    if(dt.getMonth()!==month-1)break;
+    var dow=dt.getDay();
+    if(dow===0||dow===6)continue; // fin de semana
+    var clave=String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    if(fijos.indexOf(clave)>=0)continue; // feriado
+    habiles++;
+    if(habiles===4)return dt;
+  }
+  return new Date(year,month-1,4);
+}
+
+
+function buildReciboHTML(d,c,fecha,tipo){
+  var fmt=function(n){return n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  // Empresa según maestro
+  var emp=getEmpresa(d.chofer)||{razon:'TRANSPORTE ARCE HNOS SA',cuit:'30-71535215-6',domicilio:'SOBREMONTE 2112',ciudad:'RIO CUARTO'};
+  var mae=getMaestro(d.chofer)||{};
+  var cuil=mae.cuil||d.cuil||'';
+  var legajo=mae.legajo||d.legajo||'';
+  var fi=mae.fechaIngreso||d.fechaIngreso||'';
+  var periodo=ESCALAS.periodo||(document.getElementById('esc-periodo')&&document.getElementById('esc-periodo').value)||'';
+
+  // Cuarto día hábil del mes como fecha de pago
+  var fechaPartes=fecha.split('/');
+  var anio=parseInt(fechaPartes[2]||new Date().getFullYear());
+  var mes=parseInt(fechaPartes[1]||new Date().getMonth()+1);
+  // Fecha de pago = 4° día hábil del MES SIGUIENTE al período liquidado
+  var mesPago=mes+1, anioPago=anio;
+  if(mesPago>12){mesPago=1;anioPago++;}
+  var dtPago=cuartoDiaHabil(anioPago,mesPago);
+  var diasSemana=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  var mesesNombres=['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  // Formato: "Lunes 06 de Julio de 2026"
+  var fmtPago=diasSemana[dtPago.getDay()].charAt(0).toUpperCase()+diasSemana[dtPago.getDay()].slice(1)
+    +' '+String(dtPago.getDate()).padStart(2,'0')
+    +' de '+mesesNombres[dtPago.getMonth()+1].charAt(0).toUpperCase()+mesesNombres[dtPago.getMonth()+1].slice(1)
+    +' de '+dtPago.getFullYear();
+  var lugarPago='Río Cuarto, Cor., '+fmtPago;
+
+  // Km para la liquidación — en Arcor usar kmArcorTotal, en A usar kmA
+  var kmLiq = (LIQ_TIPO==='ARCOR') ? (d.kmArcorTotal||d.km||0) : (d.km||0);
+  var kmFinde = d.km100||0;
+  var kmNormal = kmLiq - kmFinde;
+  if(kmNormal<0)kmNormal=0;
+
+  // Construir filas de conceptos (solo mostrar si >0)
+  function conceptoRow(cod,desc,uni,suj,exe,desc_val){
+    var sujV=suj>0?'$'+fmt(suj):'';
+    var exeV=exe>0?'$'+fmt(exe):'';
+    var desV=desc_val>0?'$'+fmt(desc_val):'';
+    // Ocultar línea si todos los montos son 0
+    if(!sujV&&!exeV&&!desV&&uni==='0')return '';
+    return '<tr>'
+      +'<td class="cod">'+cod+'</td>'
+      +'<td>'+desc+'</td>'
+      +'<td class="r">'+uni+'</td>'
+      +'<td class="r">'+sujV+'</td>'
+      +'<td class="r">'+exeV+'</td>'
+      +'<td class="r">'+desV+'</td>'
+      +'</tr>';
+  }
+
+  var fmtDias=fmt(d.dias);
+  var basico=ESCALAS.basico||1017089.13;
+  var kmVal=ESCALAS.km||81.36888;
+
+  var rows='';
+  rows+=conceptoRow('001','Sueldo Básico',fmtDias,c.cod001,0,0);
+  rows+=conceptoRow('005','Remunerativo chofer',fmtDias,c.cod005,0,0);
+  if(kmNormal>0) rows+=conceptoRow('060','Hs.Ext X km. Rec.',fmt(kmNormal),c.cod060,0,0);
+  if(kmFinde>0)  rows+=conceptoRow('062','Hs.Ext X km. 100',fmt(kmFinde),c.cod062,0,0);
+  if(d.descargas>0) rows+=conceptoRow('061','Control Descarga',fmt(d.descargas),c.cod061,0,0);
+  if(c.cod090>0) rows+=conceptoRow('090','Antig. Item.6.1.5','0',c.cod090,0,0);
+  // Items extras del período
+  if(ESCALAS.chkSAC)  rows+=conceptoRow('099','SAC','1,00',c.sac||0,0,0);
+  if(ESCALAS.chkCam)  rows+=conceptoRow('184','Día del Camionero','1,00',0,ESCALAS.camMonto||0,0);
+  if(ESCALAS.chkAjuste) rows+=conceptoRow('099','Ajuste período','1,00',ESCALAS.ajusteMonto||0,0,0);
+  // Items personalizados
+  (d.extras||[]).forEach(function(ex){
+    rows+=conceptoRow(ex.tipo==='rem'?'199':ex.tipo==='nr'?'183':'300',
+      ex.label,'1,00',ex.tipo==='rem'?ex.monto:0,ex.tipo==='nr'?ex.monto:0,ex.tipo==='desc'?ex.monto:0);
+  });
+  // No remunerativos
+  if(c.viatico>0) rows+=conceptoRow('181','Viatico x Km. Cam.',fmt(c.kmTotal||kmNormal+kmFinde),0,c.viatico,0);
+  if(c.bono_nr>0) rows+=conceptoRow('183','Bono acuerdo cam.','1,00',0,c.bono_nr,0);
+  // Retenciones
+  rows+=conceptoRow('300','Aporte Jubil. - 11%','',0,0,c.jub);
+  rows+=conceptoRow('301','Obra Social - 3%','',0,0,c.obraSoc);
+  rows+=conceptoRow('303','I.N.S.S.J.P - 3%','',0,0,c.inssjp);
+  rows+=conceptoRow('340','Seg. Sepelio Cam.','',0,0,c.sepelio);
+  rows+=conceptoRow('341','Cuota Federac. Cam.',fmtDias,0,0,c.cuotaDes);
+  rows+=conceptoRow('342','Cuota Sindical Cam.','',0,0,c.cc);
+  if(c.descAdi>0) rows+=conceptoRow('399','Descuento','',0,0,c.descAdi);
+
+  var totalNR=c.viatico+(c.bono_nr||0);
+
+  function oneCopy(copyLabel){
+    return '<div class="recibo-copy">'
+      +'<span class="copy-label">'+copyLabel+'</span>'
+      // Cabecera empresa
+      +'<div class="rc-top">'
+        +'<div><div class="rc-empresa">'+emp.razon+'</div>'
+        +'<div class="rc-empresa-sub">'+emp.domicilio+'&nbsp;&nbsp;'+emp.ciudad+'</div></div>'
+        +'<div class="rc-cuit">CUIT&nbsp;'+emp.cuit+'</div>'
+      +'</div>'
+      // Legajo / nombre / CUIL / fecha ingreso / recibo
+      +'<div class="rc-legajo-row">'
+        +'<div><div class="rc-hdr">Legajo</div>'+legajo+'</div>'
+        +'<div><div class="rc-hdr">Apellido y Nombre</div>'+d.chofer+'</div>'
+        +'<div><div class="rc-hdr">CUIL</div>'+(cuil||'&nbsp;')+'</div>'
+        +'<div><div class="rc-hdr">Fecha de Ingreso</div>'+(fi||'&nbsp;')+'</div>'
+        +'<div><div class="rc-hdr">Recibo N°</div>'+legajo+'</div>'
+      +'</div>'
+      // Período / categoría
+      +'<div class="rc-periodo-row">'
+        +'<div><div class="rc-hdr">Periodo de Pago</div>'+periodo+'</div>'
+        +'<div><div class="rc-hdr">Categoría</div>Chofer de 1°</div>'
+        +'<div><div class="rc-hdr">Calif.Profesional</div>&nbsp;</div>'
+        +'<div style="text-align:right"><div class="rc-hdr">Rem.Asign</div>$'+fmt(basico)+'</div>'
+      +'</div>'
+      // Tabla conceptos
+      +'<table class="rc-table"><thead><tr>'
+        +'<th style="width:34px">Cód.</th>'
+        +'<th>Concepto</th>'
+        +'<th class="r" style="width:58px">Unidades</th>'
+        +'<th class="r" style="width:88px">Sujeto a ret.</th>'
+        +'<th class="r" style="width:78px">Exento</th>'
+        +'<th class="r" style="width:88px">Descuentos</th>'
+      +'</tr></thead><tbody>'+rows+'</tbody></table>'
+      // Totales
+      +'<div class="rc-totales">'
+        +'<div class="rc-tot-col"><div class="rc-hdr">Fecha de Antig.</div><div>'+(fi||'&nbsp;')+'</div></div>'
+        +'<div class="rc-tot-col"><div class="rc-hdr">Remunerativo</div><div>$'+fmt(c.totalRem)+'</div></div>'
+        +'<div class="rc-tot-col"><div class="rc-hdr">No Remunerativo</div><div>$'+fmt(totalNR)+'</div></div>'
+        +'<div class="rc-tot-col"><div class="rc-hdr">Descuentos</div><div>$'+fmt(c.totalDes)+'</div></div>'
+      +'</div>'
+      // Neto + letras
+      +'<div class="rc-neto-row">'
+        +'<div><div style="font-size:7.5pt;color:#555">Lugar y Fecha de Pago &nbsp;'+lugarPago+'</div>'
+        +'<div class="rc-neto-label">Total Neto &nbsp; $'+fmt(c.neto)+'</div>'
+        +'<div style="font-size:7.5pt;color:#555;font-style:italic">'+numeroEnLetras(c.neto)+'</div></div>'
+      +'</div>'
+      // Pie
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:5px;font-size:7.5pt;color:#555">'
+        +'<div><div>Mod.Contr: Nuevo Período de F.Pago &nbsp; Efectivo</div>'
+        +'<div style="margin-top:3px">Obra Social: '+(emp.obraSocCodigo||'103204')+'&nbsp;'+(emp.sindicato||'Choferes')+'</div></div>'
+        +'<div style="max-width:200px;font-size:7pt;text-align:center">'
+          +'Recibo Importe Neto de esta liquidación en pago de mi remuneración correspondiente al período indicado y duplicado de la misma conforme a la ley vigente'
+        +'</div>'
+        +'<div><div style="border-top:1px solid #000;width:150px;padding-top:2px;text-align:center;font-size:7.5pt">Firma empleado</div></div>'
+      +'</div>'
     +'</div>';
+  }
+
+  return '<div class="recibo-wrap">'+oneCopy('Original Empleado')+oneCopy('Duplicado Empleador')+'</div>';
 }
 
 function printOneRecibo(){
@@ -2309,6 +2556,11 @@ var DATOS_FALTANTES = {};  // chofer -> {cuit:'', fechaIngreso:'', empresa:''}
 
 function checkChoferesFaltantes(){
   if(!tramosData)return;
+  // Si el GAS está configurado pero aún no terminó de cargar, esperar 1.5s y reintentar
+  if(GAS_URL && !MAESTRO_GAS_LOADED){
+    setTimeout(checkChoferesFaltantes, 1500);
+    return;
+  }
   var faltantes=[];
   var choferes=[];
   tramosData.forEach(function(r){if(choferes.indexOf(r.chofer)<0)choferes.push(r.chofer);});
@@ -2316,24 +2568,17 @@ function checkChoferesFaltantes(){
     var rows=tramosData.filter(function(r){return r.chofer===chofer;});
     var tieneKm=rows.some(function(r){return r.kmsSimples>0;});
     if(!tieneKm)return;
-    // Check if we have empresa data
-    if(!CHOFER_EMPRESA[chofer]){
-      // Try to get from tramosData column M (empresa)
-      var emp=rows.find(function(r){return r.empresa;});
-      if(emp) CHOFER_EMPRESA[chofer]=emp.empresa;
+    // Sincronizar empresa desde maestro (local o del Sheet)
+    var mae=getMaestro(chofer);
+    if(mae&&mae.empresa) CHOFER_EMPRESA[chofer]=mae.empresa;
+    else if(!CHOFER_EMPRESA[chofer]){
+      var empRow=rows.find(function(r){return r.empresa;});
+      if(empRow) CHOFER_EMPRESA[chofer]=empRow.empresa;
     }
-    // Faltante = tiene km pero no está en el maestro
-    var maestroEntry = getMaestro(chofer);
-    // Actualizar empresa desde maestro (Sheet puede tener datos más frescos que el local)
-    if(maestroEntry && maestroEntry.empresa) {
-      CHOFER_EMPRESA[chofer] = maestroEntry.empresa;
-    }
-    // Solo marcar como faltante si NO está en el maestro local NI en los datos ingresados
-    if(!maestroEntry && !DATOS_FALTANTES[chofer]) {
-      faltantes.push(chofer);
-    }
+    // Faltante = NO en maestro Y NO en datos ingresados manualmente
+    if(!mae&&!DATOS_FALTANTES[chofer]) faltantes.push(chofer);
   });
-  var card=document.getElementById('card-choferes-faltantes');
+  var card=document.getElementById('card-choferes-faltantes');var card=document.getElementById('card-choferes-faltantes');
   var lst=document.getElementById('faltantes-list');
   if(!faltantes.length){
     if(card)card.style.display='none';
@@ -2357,311 +2602,3 @@ function checkChoferesFaltantes(){
     lst.appendChild(div);
   });
 }
-
-function escId(s){return s.replace(/[^a-zA-Z0-9]/g,'_');}
-
-function guardarFaltante(chofer){
-  var id=escId(chofer);
-  var cuit=document.getElementById('flt-cuit-'+id).value.trim();
-  var fi=document.getElementById('flt-fi-'+id).value;
-  var emp=document.getElementById('flt-emp-'+id).value;
-  DATOS_FALTANTES[chofer]={cuit:cuit,fechaIngreso:fi,empresa:emp};
-  CHOFER_EMPRESA[chofer]=emp;
-  toast('\u2713 Datos guardados para '+chofer.split(' ')[0],'s');
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  CONFIRMAR ESCALAS — versión v10
-// ═══════════════════════════════════════════════════════════════════════
-function confirmarEscalas(){
-  var basico  = parseFloat(document.getElementById('esc-basico').value);
-  var kmVal   = parseFloat(document.getElementById('esc-km').value);
-  var descVal = parseFloat(document.getElementById('esc-desc').value);
-  var cuota   = parseFloat(document.getElementById('esc-cuota').value);
-  var fecha   = document.getElementById('esc-fecha').value;
-  var periodo = document.getElementById('esc-periodo').value.trim()||'';
-  if(!basico||!kmVal||!descVal||!cuota||!fecha){
-    toast('Complet\u00e1 todos los campos obligatorios del per\u00edodo','w'); return;
-  }
-  if(!tramosData){ toast('Carg\u00e1 primero el Informe de Tramos','w'); return; }
-
-  // Recopilar items extras del período
-  var bonoTipo=document.getElementById('esc-bono-tipo').value;
-  var bonoVal=(bonoTipo==='fijo')?parseFloat(document.getElementById('esc-bono-val').value)||0:0;
-  var chkSAC=document.getElementById('chk-sac').checked;
-  var chkCam=document.getElementById('chk-cam').checked;
-  var chkVac=document.getElementById('chk-vac').checked;
-  var chkAjuste=document.getElementById('chk-ajuste').checked;
-
-  ESCALAS={
-    basico:basico, km:kmVal, descargas:descVal, cuotaAfil:cuota,
-    fechaCalc:fecha, periodo:periodo,
-    bonoTipo:bonoTipo, bonoFijo:bonoVal,
-    chkSAC:chkSAC, chkCam:chkCam, chkVac:chkVac, chkAjuste:chkAjuste,
-    extrasGlobal:JSON.parse(JSON.stringify(ITEMS_EXTRAS))
-  };
-
-  // Leer empresa por chofer desde tramosData (columna M = empresa, idx 12 in parsed rows)
-  tramosData.forEach(function(r){
-    if(r.empresa&&!CHOFER_EMPRESA[r.chofer]) CHOFER_EMPRESA[r.chofer]=r.empresa;
-  });
-
-  // Calcular liquidaciones
-  var choferes=[];
-  tramosData.forEach(function(r){if(choferes.indexOf(r.chofer)<0)choferes.push(r.chofer);});
-  choferes.sort();
-  LIQ_DATA=[];
-
-  choferes.forEach(function(chofer){
-    var rows=tramosData.filter(function(r){return r.chofer===chofer;});
-    var kmReal=rows.reduce(function(s,r){return s+r.kmsSimples;},0);
-    if(kmReal===0)return; // skip choferes sin km
-    var kmA=Math.min(Math.round(kmReal*0.60),7000);
-    var kmB=Math.round(kmReal-kmA);
-    var arcorSI=rows.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
-    var kmArcorReal=arcorSI.reduce(function(s,r){return s+r.kmsSimples;},0);
-
-    var km,descargas;
-    if(LIQ_TIPO==='A'){
-      km=kmA;
-      descargas=Math.floor(km/1000);
-    } else {
-      km=Math.round(kmArcorReal);
-      descargas=Math.max(8,Math.ceil(km/800));
-    }
-
-    // Bono individual
-    var bono=0;
-    if(bonoTipo==='fijo') bono=bonoVal;
-    else if(bonoTipo==='individual') bono=0; // se edita en tabla
-
-    var m=getMaestro(chofer)||{};
-    var datosFlt=DATOS_FALTANTES[chofer]||{};
-    var empresa=(m.empresa||CHOFER_EMPRESA[chofer]||'TRANSPORTE ARCE HNOS SA');
-    var cuil=(datosFlt.cuit||m.cuil||'');
-    var fechaIngreso=(datosFlt.fechaIngreso||m.fechaIngreso||'');
-    var legajo=(m.legajo||'');
-
-    LIQ_DATA.push({
-      chofer:chofer, kmA:kmA, kmB:kmB, kmReal:Math.round(kmReal),
-      kmArcor:Math.round(kmArcorReal),
-      km:Math.round(km), descargas:descargas, dias:30,
-      bono:bono, descuento:0, km100:0,
-      empresa:empresa, cuil:cuil,
-      fechaIngreso:fechaIngreso, legajo:legajo,
-      extras:JSON.parse(JSON.stringify(ITEMS_EXTRAS))
-    });
-  });
-
-  renderLiqTabla();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-//  RECIBO HTML — FORMATO IMAGEN (apaisado, 2 copias)
-// ═══════════════════════════════════════════════════════════════════════
-function buildReciboHTML(d, c, fecha, tipo){
-  var emp = getEmpresa(d.chofer)||{razon:'TRANSPORTE ARCE HNOS SA',cuit:'30-71535215-6',domicilio:'SOBREMONTE 2112',ciudad:'RIO CUARTO'};
-  var periodo = ESCALAS.periodo || (fecha.split('/').slice(1).join('/'));
-  var categoria = 'Chofer de 1\u00b0';
-  var fechaIngreso = d.fechaIngreso||'';
-  var cuit = d.cuit||'';
-  // Legajo desde LIQ_DATA index
-  var legajoNum = d.legajo || String(LIQ_DATA.indexOf(d)+1).padStart(4,'0');
-
-  function numfmt(n,dec){
-    if(!n&&n!==0)return '';
-    return parseFloat(n).toLocaleString('es-AR',{minimumFractionDigits:dec===undefined?2:dec,maximumFractionDigits:dec===undefined?2:dec});
-  }
-
-  // Build concepto rows
-  var conceptos=[];
-  // 001 Sueldo Basico
-  conceptos.push({cod:'001',desc:'Sueldo B\u00e1sico',       uni:numfmt(d.dias,2),  suj:numfmt(c.basico),  exe:'',des:''});
-  // 005 Remunerativo chofer (si hay km)
-  if(d.km>0)
-    conceptos.push({cod:'005',desc:'Remunerativo chofer', uni:numfmt(d.dias,2),  suj:numfmt(c.xkm),    exe:'',des:''});
-  // 060 Hs Ext X km Rec
-  conceptos.push({cod:'060',desc:'Hs.Ext X km. Rec.',   uni:'0,00', suj:'0,00',  exe:'',des:''});
-  // 062 Hs Ext X km 100
-  if(d.km100>0||true)
-    conceptos.push({cod:'062',desc:'Hs.Ext X km. 100',   uni:'0,00', suj:numfmt(c.xkm100||0), exe:'',des:''});
-  // 061 Control Descarga
-  conceptos.push({cod:'061',desc:'Control Descarga',    uni:numfmt(d.descargas,2), suj:numfmt(c.xdesc), exe:'',des:''});
-  // 090 Antigüedad
-  conceptos.push({cod:'090',desc:'Antig. Item.6.1.5',   uni:'0,00', suj:'0,00', exe:'',des:''});
-  // SAC
-  if(ESCALAS.chkSAC)
-    conceptos.push({cod:'099',desc:'SAC',               uni:'1,00', suj:numfmt(c.sac||0), exe:'',des:''});
-  // Ajuste período
-  if(ESCALAS.chkAjuste)
-    conceptos.push({cod:'099',desc:'Ajuste per\u00edodo',   uni:'1,00', suj:'0,00', exe:'',des:''});
-  // 181 Viatico
-  conceptos.push({cod:'181',desc:'Viatico x Km. Cam.', uni:'0,00', suj:'', exe:numfmt(c.viatico), des:''});
-  // 183 Bono acuerdo
-  if(d.bono>0)
-    conceptos.push({cod:'183',desc:'Bono acuerdo cam.',  uni:'1,00', suj:'', exe:numfmt(d.bono), des:''});
-  // Día del camionero
-  if(ESCALAS.chkCam)
-    conceptos.push({cod:'184',desc:'D\u00eda del Camionero', uni:'1,00', suj:'', exe:numfmt(ESCALAS.extrasGlobal.find(function(e){return e.label==='DIA_CAM';})||{monto:0}).monto||0, des:''});
-  // Items extras
-  d.extras.forEach(function(ex){
-    var cod=ex.tipo==='rem'?'199':ex.tipo==='nr'?'183':'300';
-    conceptos.push({cod:cod,desc:ex.label,uni:'1,00',
-      suj:ex.tipo==='rem'?numfmt(ex.monto):'',
-      exe:ex.tipo==='nr'?numfmt(ex.monto):'',
-      des:ex.tipo==='desc'?numfmt(ex.monto):''});
-  });
-  // Retenciones
-  conceptos.push({cod:'300',desc:'Aporte Jubil. - 11%', uni:'',suj:'',exe:'',des:numfmt(c.jub)});
-  conceptos.push({cod:'301',desc:'Obra Social - 3%',    uni:'',suj:'',exe:'',des:numfmt(c.obraSoc)});
-  conceptos.push({cod:'303',desc:'I.N.S.S.J.P - 3%',   uni:'',suj:'',exe:'',des:numfmt(c.inssjp)});
-  conceptos.push({cod:'340',desc:'Seg. Sepelio Cam.',   uni:'',suj:'',exe:'',des:numfmt(c.sepelio)});
-  conceptos.push({cod:'341',desc:'Cuota Federac. Cam.', uni:numfmt(d.dias,2),suj:'',exe:'',des:numfmt(c.cuotaDes)});
-  conceptos.push({cod:'342',desc:'Cuota Sindical Cam.', uni:'',suj:'',exe:'',des:numfmt(c.cc)});
-  if(d.descuento>0)
-    conceptos.push({cod:'399',desc:'Descuento',         uni:'',suj:'',exe:'',des:numfmt(d.descuento)});
-
-  var rows=conceptos.map(function(r){
-    return '<tr>'
-      +'<td class="cod">'+r.cod+'</td>'
-      +'<td>'+r.desc+'</td>'
-      +'<td class="r">'+r.uni+'</td>'
-      +'<td class="r">'+r.suj+'</td>'
-      +'<td class="r">'+r.exe+'</td>'
-      +'<td class="r">'+r.des+'</td>'
-      +'</tr>';
-  }).join('');
-
-  var fechaLiqStr=fecha; // DD/MM/YYYY
-  var lugarFecha='R\u00edo Cuarto, Cor., '+fechaLiqStr;
-
-  function oneCopy(copyLabel){
-    return '<div class="recibo-copy">'
-      +'<span class="copy-label">'+copyLabel+'</span>'
-      // Cabecera empresa
-      +'<div class="rc-top">'
-        +'<div>'
-          +'<div class="rc-empresa">'+emp.razon+'</div>'
-          +'<div class="rc-empresa-sub">'+emp.domicilio+'&nbsp;&nbsp;&nbsp;'+emp.ciudad+'</div>'
-        +'</div>'
-        +'<div class="rc-cuit">CUIT&nbsp;&nbsp;'+emp.cuit+'</div>'
-      +'</div>'
-      // Fila legajo
-      +'<div class="rc-legajo-row">'
-        +'<div><div class="rc-hdr">Legajo</div>'+legajoNum+'</div>'
-        +'<div><div class="rc-hdr">Apellido y Nombre</div>'+d.chofer+'</div>'
-        +'<div><div class="rc-hdr">CUIL</div>'+(cuit||'&nbsp;')+'</div>'
-        +'<div><div class="rc-hdr">Fecha de Ingreso</div>'+(fechaIngreso||'&nbsp;')+'</div>'
-        +'<div><div class="rc-hdr">Recibo N\u00ba</div>'+legajoNum+'</div>'
-      +'</div>'
-      // Fila periodo / categoria
-      +'<div class="rc-periodo-row">'
-        +'<div><div class="rc-hdr">Periodo de Pago</div>'+periodo+'</div>'
-        +'<div><div class="rc-hdr">Categor\u00eda</div>'+categoria+'</div>'
-        +'<div><div class="rc-hdr">Calif.Profesional</div>&nbsp;</div>'
-        +'<div style="text-align:right"><div class="rc-hdr">Rem.Asign</div>'+numfmt(c.basico)+'</div>'
-      +'</div>'
-      // Tabla conceptos
-      +'<table class="rc-table">'
-        +'<thead><tr>'
-          +'<th style="width:36px">C\u00f3d.</th>'
-          +'<th>Concepto</th>'
-          +'<th class="r" style="width:60px">Unidades</th>'
-          +'<th class="r" style="width:90px">Sujeto a retenci\u00f3n</th>'
-          +'<th class="r" style="width:80px">Exento</th>'
-          +'<th class="r" style="width:90px">Descuentos</th>'
-        +'</tr></thead>'
-        +'<tbody>'+rows+'</tbody>'
-      +'</table>'
-      // Totales / neto
-      +'<div class="rc-totales">'
-        +'<div class="rc-tot-col"><div class="rc-hdr">Fecha de Antig.</div><div>'+(fechaIngreso||'&nbsp;')+'</div></div>'
-        +'<div class="rc-tot-col"><div class="rc-hdr">Remunerativo</div><div>'+numfmt(c.totalRem)+'</div></div>'
-        +'<div class="rc-tot-col"><div class="rc-hdr">No Remunerativo</div><div>'+numfmt(c.viatico+(d.bono||0))+'</div></div>'
-        +'<div class="rc-tot-col"><div class="rc-hdr">Descuentos</div><div>'+numfmt(c.totalDes)+'</div></div>'
-      +'</div>'
-      +'<div class="rc-neto-row">'
-        +'<div>'
-          +'<div style="font-size:8pt;color:#555">Lugar y Fecha de Pago&nbsp;&nbsp;'+lugarFecha+'</div>'
-          +'<div class="rc-neto-label">Total Neto</div>'
-        +'</div>'
-        +'<div class="rc-neto-val">'+numfmt(c.neto)+'</div>'
-      +'</div>'
-      // Texto legal
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px;font-size:7.5pt;color:#555">'
-        +'<div>'
-          +'<div>Mod.Contr: Nuevo Per\u00edodo de F.Pago &nbsp;Efectivo</div>'
-          +'<div style="margin-top:4px">Mes&nbsp;&nbsp;&nbsp;Banco&nbsp;&nbsp;&nbsp;Fecha Dep\u00f3sito</div>'
-          +'<div>Obra Social: '+emp.obraSocCodigo+'&nbsp;'+emp.sindicato+'</div>'
-        +'</div>'
-        +'<div style="max-width:220px;font-size:7pt;text-align:center;color:#555">'
-          +'Recibo Importe Neto de esta liquidaci\u00f3n en pago de mi remuneraci\u00f3n correspondiente al per\u00edodo indicado y duplicado de la misma conforme a la ley vigente'
-        +'</div>'
-        +'<div class="rc-firmas">'
-          +'<div class="firma-line">Firma empleado</div>'
-        +'</div>'
-      +'</div>'
-    +'</div>'; // end recibo-copy
-  }
-
-  return '<div class="recibo-wrap">'
-    + oneCopy('Original Empleado')
-    + oneCopy('Duplicado Empleador')
-    +'</div>';
-}
-
-/* getReciboCSS v1 removed */
-
-
-function copyIndexHTML(){
-  navigator.clipboard.writeText(window.location.href).then(function(){toast('URL copiada al portapapeles','s');});
-}
-
-// Render GAS code on tab load
-document.addEventListener('DOMContentLoaded',function(){
-  var el=document.getElementById('gas-code');
-  if(el)el.textContent=GAS_CODE;
-  renderPadronTable();
-  // Restaurar URL del Sheet guardada
-  var savedUrl=localStorage.getItem('arce_gas_url')||'';
-  if(savedUrl){
-    var inp=document.getElementById('inp-gas-url');
-    if(inp) inp.value=savedUrl;
-    setGasBtnState('ok');
-    // Auto-cargar maestro y escalas al arrancar si ya hay URL configurada
-    setTimeout(function(){
-      cargarEscalasDesdeGAS();
-      cargarMaestroDesdeGAS();
-    }, 1000);
-  }
-  updateGasStatus();
-});
-
-// ═══════════════════════════════════════════════════════════════════════
-//  UI HELPERS
-// ═══════════════════════════════════════════════════════════════════════
-function showTab(id,btn){
-  document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active');});
-  document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.remove('active');});
-  document.getElementById(id).classList.add('active');
-  if(btn)btn.classList.add('active');
-}
-function setStep(n){[1,2,3].forEach(function(i){var el=document.getElementById('st'+i);el.className='sb'+(i<n?' done':i===n?' active':'');});}
-function setStatus(st,txt){document.getElementById('sdot').className='sdot'+(st==='ok'?' ok':st==='proc'?' proc':'');document.getElementById('stxt').textContent=txt;}
-function setP(pct,st,txt){document.getElementById('pf').style.width=pct+'%';document.getElementById('pdot2').className='pdot2 '+(st==='run'?'run':st==='done'?'done':'err');document.getElementById('ptxt').textContent=txt;}
-function toast(msg,t){var el=document.getElementById('toast');el.textContent=msg;el.className='toast show'+(t?' '+t:'');setTimeout(function(){el.className='toast';},3500);}
-
-['dz-t','dz-p'].forEach(function(id){
-  var el=document.getElementById(id);
-  if(!el)return;
-  el.addEventListener('dragover',function(e){e.preventDefault();el.classList.add('over');});
-  el.addEventListener('dragleave',function(){el.classList.remove('over');});
-  el.addEventListener('drop',function(e){
-    e.preventDefault();el.classList.remove('over');
-    var f=e.dataTransfer.files[0];
-    if(f)id==='dz-t'?loadTramos(f):loadPadronExtra(f);
-  });
-});
-</script>
-</body>
-</html>
