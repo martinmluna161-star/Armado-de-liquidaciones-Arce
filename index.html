@@ -1106,6 +1106,8 @@ function buildWorkbook(){
     totalKm100:resumen.reduce(function(s,r){return s+r.km100;},0),
     totalArcor:resumen.reduce(function(s,r){return s+r.kmArcorTotal;},0),
     mes:mesNum+'/'+mesYear};
+  // Guardar resumen globalmente para que confirmarEscalas lo use
+  RESUMEN_KMS = resumen;
   return wb;
 }
 
@@ -1138,7 +1140,9 @@ function buildArcorTrips(arcorRows,mesYear,mesNum){
     var dtV=new Date(dtFin);dtV.setDate(dtV.getDate()+1);
     trips.push({dt:dtV,orig:ult.dest,dest:'RIO CUARTO',km:kV,tipo:'generado_retorno',carga:'NO'});
   }
-  var km100=trips.filter(function(t){return t.tipo==='real'&&t.carga==='SI'&&t.dt&&esFeriadoOFinde(t.dt);}).reduce(function(s,t){return s+t.km;},0);
+  // km100 = todos los km (reales Y generados) cuyo DÍA es sábado/domingo/feriado
+  // Independientemente del tipo y carga — lo que importa es la FECHA del día
+  var km100=trips.filter(function(t){return t.dt&&esFeriadoOFinde(t.dt)&&t.km>0;}).reduce(function(s,t){return s+t.km;},0);
   return {trips:trips,km100:km100};
 }
 
@@ -1206,7 +1210,20 @@ function buildResumenSheet(resumen,mesYear,mesNum){
 
 function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
   var byDate={};
-  trips.forEach(function(t){if(t.dt)byDate[t.dt.toDateString()]=t;});
+  trips.forEach(function(t){
+    if(!t.dt)return;
+    var assignDate=t.dt;
+    // Tipo A: correr trips de finde al día hábil siguiente
+    if(typeof LIQ_TIPO!=='undefined' && LIQ_TIPO==='A'){
+      var d2=new Date(t.dt);
+      while(esFeriadoOFinde(d2)){
+        d2.setDate(d2.getDate()+1);
+      }
+      assignDate=d2;
+    }
+    // Si ya hay un trip asignado a ese día, no sobreescribir (no sumar trayectos)
+    if(!byDate[assignDate.toDateString()]) byDate[assignDate.toDateString()]=t;
+  });
   var fechas=trips.filter(function(t){return t.dt;}).map(function(t){return t.dt;});
   if(!fechas.length)return XLSX.utils.aoa_to_sheet([]);
   var dtMin=new Date(mesYear,mesNum-1,1);
@@ -1264,7 +1281,9 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
       var dt=entry.dt,trip=entry.trip;
       var dia=DIAS_ES[dt.getDay()];
       var finde=esFeriadoOFinde(dt);
-      var rFill=finde?YC:null;
+      // En tipo A no hay km al 100% — no colorear finde en amarillo
+      var esLiqA=(typeof LIQ_TIPO!=='undefined'&&LIQ_TIPO==='A');
+      var rFill=(finde&&!esLiqA)?YC:null;
       var row=Array.from({length:14},function(_,k){
         if(k===0)return mkCell('');
         var s={font:DAT,border:rowBrd(k+1),alignment:ACn};
@@ -1273,15 +1292,21 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
       });
       row[1]={v:dia,t:'s',s:{font:DAT,border:rowBrd(2),alignment:ACn,fill:rFill?{fgColor:{rgb:rFill}}:undefined}};
       row[2]={v:fmtDate(dt),t:'s',s:{font:DAT,border:rowBrd(3),alignment:ACn,fill:rFill?{fgColor:{rgb:rFill}}:undefined}};
+      // Tipo A: mostrar el trip en el día hábil correcto (desplazar finde → lunes)
+      var tripEfectivo = trip;
+      if(trip && typeof LIQ_TIPO !== 'undefined' && LIQ_TIPO==='A'){
+        // El trip se muestra en el día de la planilla (dt), no en su fecha original
+        // Si dt es finde, el trip ya fue "corrido" al siguiente hábil por la planilla
+        // (no hacemos nada aquí — el buildChoferSheet ya itera por días del mes)
+      }
       if(trip){
         row[3]={v:trip.orig,t:'s',s:{font:DAT,border:rowBrd(4),alignment:ACn}};
         row[4]={v:dia,t:'s',s:{font:DAT,border:rowBrd(5),alignment:ACn}};
         row[5]={v:fmtDate(dt),t:'s',s:{font:DAT,border:rowBrd(6),alignment:ACn}};
         row[6]={v:trip.dest,t:'s',s:{font:DAT,border:rowBrd(7),alignment:ACn}};
         if(trip.km&&trip.km>0)row[7]={v:+trip.km,t:'n',s:{font:DAT,border:rowBrd(8),alignment:ACn}};
-        // Km al 100%: finde O feriado, con viaje real con carga
-        // Usar la fecha del DÍA de la planilla (dt) no del viaje para evitar desfases de zona horaria
-        var esFinde100 = esFeriadoOFinde(dt);
+        // Km al 100%: solo para tipo ARCOR — tipo A no discrimina finde
+        var esFinde100 = esFeriadoOFinde(dt) && !(typeof LIQ_TIPO!=='undefined'&&LIQ_TIPO==='A');
         if(esFinde100 && trip.km>0)
           row[13]={v:+trip.km,t:'n',s:{font:{name:'Calibri',sz:10,bold:true,color:{rgb:RC}},border:rowBrd(14),alignment:ACn}};
       }
@@ -1721,6 +1746,7 @@ function copyGAS(){
 //  LIQUIDACIÓN DE SUELDOS v9
 // ═══════════════════════════════════════════════════════════════════════
 var LIQ_TIPO = '';          // 'A' | 'ARCOR'
+var RESUMEN_KMS = [];       // resultado del Tab 1 — km100 y kmArcorTotal por chofer
 var LIQ_DATA = [];          // array de objetos calculados por chofer
 var RECIBO_IDX = 0;         // índice del recibo en preview
 
@@ -1787,7 +1813,20 @@ function confirmarEscalas(){
   if(!tramosData){ toast('Carg\u00e1 primero el Informe de Tramos (Paso 1)','w'); return; }
 
   // Update global escalas
-  ESCALAS = {basico:basico, km:kmVal, descargas:descVal, cuotaAfil:cuota, fechaCalc:fecha};
+  // Leer bono y período del formulario ANTES de sobrescribir ESCALAS
+  var _bonoTipo = document.getElementById('esc-bono-tipo') ? document.getElementById('esc-bono-tipo').value : (ESCALAS.bonoTipo||'no');
+  var _bonoFijo = parseFloat(document.getElementById('esc-bono-val') ? document.getElementById('esc-bono-val').value : 0) || (ESCALAS.bonoFijo||0);
+  var _periodo  = document.getElementById('esc-periodo')  ? document.getElementById('esc-periodo').value.trim()  : (ESCALAS.periodo||'');
+  var _chkSAC   = document.getElementById('chk-sac')    ? document.getElementById('chk-sac').checked    : false;
+  var _chkCam   = document.getElementById('chk-cam')    ? document.getElementById('chk-cam').checked    : false;
+  var _chkAjuste= document.getElementById('chk-ajuste') ? document.getElementById('chk-ajuste').checked : false;
+
+  ESCALAS = {
+    basico:basico, km:kmVal, descargas:descVal, cuotaAfil:cuota, fechaCalc:fecha,
+    bonoTipo:_bonoTipo, bonoFijo:_bonoFijo, periodo:_periodo,
+    chkSAC:_chkSAC, chkCam:_chkCam, chkAjuste:_chkAjuste,
+    extrasGlobal: JSON.parse(JSON.stringify(ITEMS_EXTRAS||[]))
+  };
 
   // Compute LIQ_DATA
   var choferes=[];
@@ -1803,6 +1842,9 @@ function confirmarEscalas(){
     // Arcor planilla total (reutiliza lógica ya calculada si existe en resumen)
     var arcorSI=rows.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
     var kmArcorReal=arcorSI.reduce(function(s,r){return s+r.kmsSimples;},0);
+
+    // Usar datos del Tab 1 si ya fueron calculados (más precisos)
+    var _resEntry = RESUMEN_KMS.filter(function(r){return r.chofer===chofer;})[0]||null;
 
     // Detectar mes del período
     var mesCnt={};
@@ -1823,12 +1865,14 @@ function confirmarEscalas(){
       km=kmA;
       descargas=Math.floor(km/1000);
       // km100 para tipo A: todos los km del mes en finde/feriados
-      km100=rows.filter(function(r){
-        var dt=parseDate(r.fechaIn); return dt&&esFeriadoOFinde(dt);
-      }).reduce(function(s,r){return s+r.kmsSimples;},0);
+      km100=0; // Tipo A: no discrimina sábado/domingo — todos km normales
     } else {
-      // KMs Totales Planilla Arcor (reales + posicionamiento generado)
-      if(trips.length>0){
+      // KMs Totales Planilla Arcor — preferir datos del Tab 1 (ya calculados correctamente)
+      if(_resEntry && (_resEntry.kmArcorTotal||_resEntry.km100)){
+        km=Math.round(_resEntry.kmArcorTotal||_resEntry.kmRealArcor||kmArcorReal);
+        km100=_resEntry.km100||0;
+        kmArcorTotal=km;
+      } else if(trips.length>0){
         kmArcorTotal=trips.reduce(function(s,t){return s+t.km;},0);
         km=Math.round(kmArcorTotal);
         km100=resArcor.km100||0;
@@ -1860,7 +1904,8 @@ function confirmarEscalas(){
       bono:bono, descuento:descuento, km100:km100,
       empresa:empresa, cuil:cuil,
       fechaIngreso:fechaIngreso, legajo:legajo,
-      extras:JSON.parse(JSON.stringify(ITEMS_EXTRAS||[]))
+      extras:JSON.parse(JSON.stringify(ITEMS_EXTRAS||[])),
+      tipoLiq:LIQ_TIPO
     });
   });
 
@@ -1925,10 +1970,11 @@ function calcNeto(d){
   var descVal  = ESCALAS.descargas|| 42378.71;
   var cuota    = ESCALAS.cuotaAfil|| 20341.78;
 
-  // km = km días normales (excluye finde/feriados)
-  // km100 = km finde/feriados
-  var kmNormal  = d.km;                    // días hábiles
-  var kmFinde   = d.km100||0;              // sábados/domingos/feriados
+  // km100 solo aplica en tipo ARCOR.
+  // En tipo A: todos los km se liquidan como normales (item 060), sin 062.
+  var esArcorLiq = (d.tipoLiq||'A')==='ARCOR';
+  var kmNormal  = esArcorLiq ? d.km              : (d.km+(d.km100||0)); // A: todos normales
+  var kmFinde   = esArcorLiq ? (d.km100||0)      : 0;                   // A: sin 062
   var kmTotal   = kmNormal + kmFinde;      // total mes (para viático)
 
   // 001 Básico proporcional a días
@@ -2058,10 +2104,23 @@ function buildReciboHTML(d,c,fecha,tipo){
   var periodo=ESCALAS.periodo||(document.getElementById('esc-periodo')&&document.getElementById('esc-periodo').value)||'';
 
   // Cuarto día hábil del mes como fecha de pago
+  // Fecha de pago = 4° hábil del mes SIGUIENTE al PERÍODO (no a la fecha de liquidación)
+  var _mesesMap={'enero':1,'febrero':2,'marzo':3,'abril':4,'mayo':5,'junio':6,
+    'julio':7,'agosto':8,'septiembre':9,'octubre':10,'noviembre':11,'diciembre':12};
+  var _periodoStr=(ESCALAS.periodo||periodo||'').toLowerCase().trim();
+  var _periodoMes=0, _periodoAnio=0;
+  // Intentar parsear "JUNIO 2026" → mes 6, año 2026
+  Object.keys(_mesesMap).forEach(function(nm){
+    if(_periodoStr.indexOf(nm)>=0){
+      _periodoMes=_mesesMap[nm];
+      var _m=_periodoStr.match(/\d{4}/);
+      if(_m)_periodoAnio=parseInt(_m[0]);
+    }
+  });
+  // Fallback: usar la fecha de liquidación si no se pudo parsear el período
   var fechaPartes=fecha.split('/');
-  var anio=parseInt(fechaPartes[2]||new Date().getFullYear());
-  var mes=parseInt(fechaPartes[1]||new Date().getMonth()+1);
-  // Fecha de pago = 4° día hábil del MES SIGUIENTE al período liquidado
+  var anio = _periodoAnio || parseInt(fechaPartes[2]||new Date().getFullYear());
+  var mes  = _periodoMes  || parseInt(fechaPartes[1]||new Date().getMonth()+1);
   var mesPago=mes+1, anioPago=anio;
   if(mesPago>12){mesPago=1;anioPago++;}
   var dtPago=cuartoDiaHabil(anioPago,mesPago);
