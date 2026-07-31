@@ -694,9 +694,22 @@ var MAESTRO_EMPLEADOS = {"AGUERO MAURICIO RAMON": {"fechaIngreso": "09/03/2026",
 var CHOFER_EMPRESA = {};
 
 function getMaestro(chofer) {
-  // Búsqueda exacta primero, luego case-insensitive
-  var key = String(chofer).trim().toUpperCase();
-  return MAESTRO_EMPLEADOS[key] || null;
+  if(!chofer) return null;
+  var name = String(chofer).trim().toUpperCase().replace(/\s+/g,' ');
+  // 1. Búsqueda exacta directa
+  if(MAESTRO_EMPLEADOS[name]) return MAESTRO_EMPLEADOS[name];
+  // 2. Búsqueda case-insensitive normalizada
+  var keys = Object.keys(MAESTRO_EMPLEADOS);
+  for(var i=0;i<keys.length;i++){
+    if(keys[i].trim().toUpperCase().replace(/\s+/g,' ') === name)
+      return MAESTRO_EMPLEADOS[keys[i]];
+  }
+  // 3. Búsqueda parcial (por si el informe trae apellido truncado o con tilde diferente)
+  for(var j=0;j<keys.length;j++){
+    var k = keys[j].trim().toUpperCase().replace(/\s+/g,' ');
+    if(k.indexOf(name)>=0 || name.indexOf(k)>=0) return MAESTRO_EMPLEADOS[keys[j]];
+  }
+  return null;
 }
 
 function getEmpresa(chofer) {
@@ -1569,8 +1582,10 @@ function testGasConnection() {
       var d = JSON.parse(xhr.responseText);
       if (d.ok) {
         setGasBtnState('ok');
-        toast('Conexión exitosa con el WebApp ✓', 's');
+        toast('Conexión exitosa con el WebApp ✔', 's');
         cargarEscalasDesdeGAS();
+        // Cargar maestro de empleados del Sheet para evitar el panel "sin datos"
+        setTimeout(cargarMaestroDesdeGAS, 600);
       } else throw new Error(d.error || 'Respuesta inesperada');
     } catch(e) {
       setGasBtnState('error');
@@ -1604,11 +1619,63 @@ function setGasBtnState(state) {
 function cargarEscalasDesdeGAS() {
   gasCall('obtenerEscalas')
     .then(function(data) {
-      var e = data.escalas;
-      ESCALAS = e;
-      toast('Escalas actualizadas desde el Sheet', 's');
+      if(data && data.escalas) {
+        ESCALAS = Object.assign(ESCALAS, data.escalas);
+        // Pre-completar formulario de escalas si está visible
+        ['basico','km','descargas','cuotaAfil'].forEach(function(k) {
+          var campo = {basico:'esc-basico',km:'esc-km',descargas:'esc-desc',cuotaAfil:'esc-cuota'}[k];
+          var el = document.getElementById(campo);
+          if(el && !el.value && ESCALAS[k]) el.value = ESCALAS[k];
+        });
+      }
     })
-    .catch(function() {}); // silencioso si falla
+    .catch(function() {});
+}
+
+// Carga el maestro de empleados desde el Sheet y actualiza MAESTRO_EMPLEADOS
+function cargarMaestroDesdeGAS() {
+  if(!GAS_URL) return;
+  gasCall('obtenerDatosFijos')
+    .then(function(data) {
+      if(!data || !data.empleados || !data.empleados.length) {
+        console.log('GAS: sin empleados devueltos');
+        return;
+      }
+      var actualizados = 0;
+      data.empleados.forEach(function(emp) {
+        // El GAS devuelve 'Nombre del Chofer', 'nombre' o 'Chofer' — tomamos el que exista
+        var nombre = String(
+          emp['Nombre del Chofer'] || emp['nombre'] || emp['Chofer'] || ''
+        ).trim().toUpperCase();
+        if(!nombre) return;
+
+        var entry = {
+          fechaIngreso : emp['Fecha Ingreso']    || emp['fechaIngreso']   || '',
+          empresa      : emp['Empresa']           || emp['empresa']        || 'TRANSPORTE ARCE HNOS SA',
+          cuil         : emp['CUIL']              || emp['cuil']           || '',
+          legajo       : emp['Legajo']            || emp['legajo']         || '',
+          categoria    : emp['Categoría']         || emp['categoria']      || 'Chofer de 1°',
+        };
+
+        // Normalizar empresa
+        if(entry.empresa.toUpperCase().indexOf('INLOG') >= 0) {
+          entry.empresa = 'INLOG SAS';
+        } else {
+          entry.empresa = 'TRANSPORTE ARCE HNOS SA';
+        }
+
+        MAESTRO_EMPLEADOS[nombre] = entry;
+        CHOFER_EMPRESA[nombre]    = entry.empresa;
+        actualizados++;
+      });
+
+      console.log('Maestro actualizado desde Sheet: ' + actualizados + ' empleados');
+      // Re-evaluar faltantes con el maestro actualizado
+      if(tramosData) checkChoferesFaltantes();
+    })
+    .catch(function(e) {
+      console.log('cargarMaestroDesdeGAS error (silencioso):', e.message);
+    });
 }
 
 var GAS_CODE = [
@@ -2257,7 +2324,12 @@ function checkChoferesFaltantes(){
     }
     // Faltante = tiene km pero no está en el maestro
     var maestroEntry = getMaestro(chofer);
-    if(!DATOS_FALTANTES[chofer] && !maestroEntry){
+    // Actualizar empresa desde maestro (Sheet puede tener datos más frescos que el local)
+    if(maestroEntry && maestroEntry.empresa) {
+      CHOFER_EMPRESA[chofer] = maestroEntry.empresa;
+    }
+    // Solo marcar como faltante si NO está en el maestro local NI en los datos ingresados
+    if(!maestroEntry && !DATOS_FALTANTES[chofer]) {
       faltantes.push(chofer);
     }
   });
@@ -2550,12 +2622,17 @@ document.addEventListener('DOMContentLoaded',function(){
   var el=document.getElementById('gas-code');
   if(el)el.textContent=GAS_CODE;
   renderPadronTable();
-  // Restore saved GAS URL
+  // Restaurar URL del Sheet guardada
   var savedUrl=localStorage.getItem('arce_gas_url')||'';
   if(savedUrl){
     var inp=document.getElementById('inp-gas-url');
     if(inp) inp.value=savedUrl;
     setGasBtnState('ok');
+    // Auto-cargar maestro y escalas al arrancar si ya hay URL configurada
+    setTimeout(function(){
+      cargarEscalasDesdeGAS();
+      cargarMaestroDesdeGAS();
+    }, 1000);
   }
   updateGasStatus();
 });
