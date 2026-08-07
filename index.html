@@ -485,7 +485,7 @@ textarea.paste-area:focus{outline:none;border-color:var(--rojo)}
     <div class="cb">
       <div class="pvw" id="vars-table-wrap" style="max-height:320px"></div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-        <button class="btn-dl red" id="btn-ver-recibos" onclick="abrirPreviewRecibos()" style="display:none">&#128203; Ver y imprimir recibos</button>
+        <button class="btn-dl red" id="btn-ver-recibos" onclick="pedirConfigCostosYAbrirRecibos()" style="display:none">&#128203; Ver y imprimir recibos</button>
         <button class="btn-dl blue" id="btn-ver-resumen-b" onclick="abrirResumenB()" style="display:none">&#128202; Resumen KMs B</button>
       </div>
     </div>
@@ -1723,6 +1723,7 @@ function testGasConnection() {
         cargarEscalasDesdeGAS();
         // Cargar maestro de empleados del Sheet para evitar el panel "sin datos"
         setTimeout(cargarMaestroDesdeGAS, 600);
+        setTimeout(cargarPadronDesdeGAS, 900);
       } else throw new Error(d.error || 'Respuesta inesperada');
     } catch(e) {
       setGasBtnState('error');
@@ -1813,6 +1814,31 @@ function cargarMaestroDesdeGAS() {
     })
     .catch(function(e) {
       console.log('cargarMaestroDesdeGAS error (silencioso):', e.message);
+    });
+}
+
+// Carga el padrón de tramos desde la hoja PADRON_TRAMOS del Sheet y lo mergea
+// sobre el padrón embebido en el HTML (KM). Así cualquier PC que abra el HTML
+// y se conecte al Sheet tiene siempre el padrón más actualizado, sin depender
+// de reemplazar el archivo HTML cada vez que se agregan tramos nuevos.
+var PADRON_GAS_LOADED = false;
+function cargarPadronDesdeGAS() {
+  if(!GAS_URL) return;
+  gasCall('obtenerPadronTramos')
+    .then(function(data) {
+      if(!data || !data.ok || !data.padron) {
+        console.log('GAS: no se pudo cargar PADRON_TRAMOS —', (data&&data.error)||'sin datos');
+        return;
+      }
+      var n=0;
+      Object.keys(data.padron).forEach(function(k){ KM[k]=data.padron[k]; n++; });
+      PADRON_GAS_LOADED = true;
+      console.log('Padrón de tramos actualizado desde Sheet: '+n+' pares origen-destino');
+      updatePadronUI();
+      toast('Padrón de tramos actualizado desde el Sheet ('+n+' pares)','s');
+    })
+    .catch(function(e) {
+      console.log('cargarPadronDesdeGAS error (silencioso):', e.message);
     });
 }
 
@@ -2113,7 +2139,7 @@ function calcNeto(d){
 }
 
 // ── Imprimir recibos ──────────────────────────────────────────────────
-function abrirPreviewRecibos(){
+function abrirPreviewRecibosReal(){
   RECIBO_IDX=0;
   document.getElementById('card-recibos').style.display='';
   renderOneRecibo(0);
@@ -2197,6 +2223,10 @@ function buildReciboHTML(d,c,fecha,tipo){
   var cuil=mae.cuil||d.cuil||'';
   var legajo=mae.legajo||d.legajo||'';
   var fi=mae.fechaIngreso||d.fechaIngreso||'';
+  var FALTA='⚠ FALTA CARGAR EN MAESTRO';
+  if(!cuil) cuil=FALTA;
+  if(!legajo) legajo=FALTA;
+  if(!fi) fi=FALTA;
   var periodo=ESCALAS.periodo||(document.getElementById('esc-periodo')&&document.getElementById('esc-periodo').value)||'';
 
   // Cuarto día hábil del mes como fecha de pago
@@ -2347,7 +2377,100 @@ function buildReciboHTML(d,c,fecha,tipo){
     +'</div>';
   }
 
-  return '<div class="recibo-wrap">'+oneCopy('Original Empleado')+oneCopy('Duplicado Empleador')+'</div>';
+  return '<div class="recibo-wrap">'+oneCopy('Original Empleado')+oneCopy('Duplicado Empleador')+costoEmpleadorHTML(d,c,basico)+'</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  COSTO TOTAL EMPLEADOR — panel adicional exigido por la nueva legislación
+//  (no reemplaza el recibo legal de arriba, se agrega debajo)
+// ═══════════════════════════════════════════════════════════════════════
+var CONFIG_COSTOS = null; // null = todavía no se cargaron los porcentajes esta sesión
+
+function costoEmpleadorHTML(d,c,basico){
+  if(!CONFIG_COSTOS) return ''; // si no se cargaron los % no se muestra el panel (no se inventa nada)
+  var fmt=function(n){return (n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var sueldoBruto = (c.totalRem||0);
+  var montoLRT = sueldoBruto * (CONFIG_COSTOS.lrtPct||0)/100;
+  var montoLRTFija = CONFIG_COSTOS.lrtFija||0;
+  var montoSeguroVida = CONFIG_COSTOS.seguroVida||0;
+  var montoSindicalEmp = sueldoBruto * (CONFIG_COSTOS.sindicalEmpleadorPct||0)/100;
+  var montoInssjpEmp = sueldoBruto * (CONFIG_COSTOS.inssjpEmpleadorPct||0)/100;
+  var montoSegSocialEmp = sueldoBruto * (CONFIG_COSTOS.segSocialEmpleadorPct||0)/100;
+  var montoObraSocialEmp = sueldoBruto * (CONFIG_COSTOS.obraSocialEmpleadorPct||0)/100;
+  var costoART = montoLRT + montoLRTFija;
+  var subtotalContrib = costoART + montoSeguroVida + montoSindicalEmp + montoInssjpEmp + montoSegSocialEmp + montoObraSocialEmp;
+  var costoTotalEmpleador = sueldoBruto + subtotalContrib;
+  function row(label,cant,base,monto){
+    return '<tr><td style="padding:3px 8px">'+label+'</td><td class="r" style="padding:3px 8px">'+cant+'</td>'
+      +'<td class="r" style="padding:3px 8px">'+fmt(base)+'</td><td class="r" style="padding:3px 8px;font-weight:600">'+fmt(monto)+'</td></tr>';
+  }
+  return '<div class="costo-empleador-panel" style="margin-top:14px;border:1px solid #1B2A5E;border-radius:6px;overflow:hidden;font-family:Arial,sans-serif;font-size:9pt;page-break-inside:avoid">'
+    +'<div style="background:#1B2A5E;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;font-weight:700">'
+      +'<span>COSTO TOTAL EMPLEADOR</span><span>$'+fmt(costoTotalEmpleador)+'</span>'
+    +'</div>'
+    +'<table style="width:100%;border-collapse:collapse">'
+      +'<tr style="background:#F2F4F8;font-weight:700"><td style="padding:3px 8px">Concepto</td><td class="r" style="padding:3px 8px">Cantidad</td><td class="r" style="padding:3px 8px">Base</td><td class="r" style="padding:3px 8px">Monto</td></tr>'
+      +row('Contribución LRT',(CONFIG_COSTOS.lrtPct||0).toLocaleString('es-AR')+'%',sueldoBruto,montoLRT)
+      +row('Seguro Colectivo de Vida','1',0,montoSeguroVida)
+      +row('Contribución LRT cuota fija','1',0,montoLRTFija)
+      +(montoSindicalEmp>0?row('Costo Sindical Empleador',(CONFIG_COSTOS.sindicalEmpleadorPct||0)+'%',sueldoBruto,montoSindicalEmp):'')
+      +(montoInssjpEmp>0?row('INSSJP Empleador',(CONFIG_COSTOS.inssjpEmpleadorPct||0)+'%',sueldoBruto,montoInssjpEmp):'')
+      +(montoSegSocialEmp>0?row('Seg. Social Empleador',(CONFIG_COSTOS.segSocialEmpleadorPct||0)+'%',sueldoBruto,montoSegSocialEmp):'')
+      +(montoObraSocialEmp>0?row('Obra Social Empleador',(CONFIG_COSTOS.obraSocialEmpleadorPct||0)+'%',sueldoBruto,montoObraSocialEmp):'')
+    +'</table>'
+    +'<div style="background:#1B2A5E;color:#fff;padding:6px 12px;display:flex;justify-content:space-between;font-weight:700">'
+      +'<span>SUBTOTAL CONTRIBUCIONES</span><span>$'+fmt(subtotalContrib)+'</span>'
+    +'</div>'
+    +'<div style="background:#1B2A5E;color:#fff;padding:6px 12px;display:flex;justify-content:space-between;font-weight:700">'
+      +'<span>SUELDO BRUTO</span><span>$'+fmt(sueldoBruto)+'</span>'
+    +'</div>'
+  +'</div>';
+}
+
+// Modal simple para cargar los % de costo empleador antes de generar los recibos.
+// Se muestra una sola vez por sesión (o si se cancela, se vuelve a pedir la próxima vez).
+function pedirConfigCostosYAbrirRecibos(){
+  if(CONFIG_COSTOS!==null){ abrirPreviewRecibosReal(); return; }
+  var overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML='<div style="background:#fff;border-radius:10px;padding:22px;max-width:420px;width:90%;font-family:Arial,sans-serif">'
+    +'<h3 style="margin:0 0 4px;color:#1B2A5E">Costo Total Empleador</h3>'
+    +'<p style="font-size:12px;color:#555;margin:0 0 14px">La nueva legislación exige mostrar el costo empleador en el recibo. Cargá los porcentajes/montos vigentes (quedan guardados sólo para esta sesión):</p>'
+    +'<div style="display:grid;gap:8px">'
+      +campoCosto('cc-lrt','% Contribución LRT (sobre sueldo bruto)','5.47')
+      +campoCosto('cc-lrtfija','Contribución LRT cuota fija ($)','1839')
+      +campoCosto('cc-segvida','Seguro Colectivo de Vida ($)','424.62')
+      +campoCosto('cc-sindical','% Costo Sindical Empleador (opcional)','0')
+      +campoCosto('cc-inssjp','% INSSJP Empleador (opcional)','0')
+      +campoCosto('cc-segsocial','% Seg. Social Empleador (opcional)','0')
+      +campoCosto('cc-obrasocial','% Obra Social Empleador (opcional)','0')
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">'
+      +'<button id="cc-omitir" style="padding:8px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer">Omitir (sin panel de costos)</button>'
+      +'<button id="cc-confirmar" style="padding:8px 14px;border:none;border-radius:6px;background:#C0392B;color:#fff;font-weight:700;cursor:pointer">Confirmar y generar</button>'
+    +'</div>'
+  +'</div>';
+  document.body.appendChild(overlay);
+  function num(id){return parseFloat(document.getElementById(id).value)||0;}
+  document.getElementById('cc-confirmar').onclick=function(){
+    CONFIG_COSTOS={
+      lrtPct:num('cc-lrt'), lrtFija:num('cc-lrtfija'), seguroVida:num('cc-segvida'),
+      sindicalEmpleadorPct:num('cc-sindical'), inssjpEmpleadorPct:num('cc-inssjp'),
+      segSocialEmpleadorPct:num('cc-segsocial'), obraSocialEmpleadorPct:num('cc-obrasocial')
+    };
+    document.body.removeChild(overlay);
+    abrirPreviewRecibosReal();
+  };
+  document.getElementById('cc-omitir').onclick=function(){
+    CONFIG_COSTOS=false; // false = "no mostrar panel", distinto de null ("todavía no preguntado")
+    document.body.removeChild(overlay);
+    abrirPreviewRecibosReal();
+  };
+}
+function campoCosto(id,label,placeholder){
+  return '<label style="font-size:12px;color:#333">'+label
+    +'<input type="number" step="0.01" id="'+id+'" placeholder="'+placeholder+'" style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:5px;margin-top:2px">'
+  +'</label>';
 }
 
 function printOneRecibo(){
@@ -2675,6 +2798,7 @@ document.addEventListener('DOMContentLoaded',function(){
     setTimeout(function(){
       cargarEscalasDesdeGAS();
       cargarMaestroDesdeGAS();
+      cargarPadronDesdeGAS();
     }, 1000);
   }
   updateGasStatus();
