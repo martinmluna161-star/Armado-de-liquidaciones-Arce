@@ -1081,16 +1081,12 @@ function buildWorkbook(){
     var kmA=Math.min(Math.round(kmReal*0.60),7000);
     var kmB=Math.round(kmReal-kmA);
     var patente=(ch.find(function(r){return r.patente;})||{patente:''}).patente;
-    // KMs Arcor reales (solo CARGA=SI y cliente Arcor) — para el indicador "KMs Reales Arcor"
+    // KMs Arcor reales (solo CARGA=SI y cliente Arcor)
     var arcorRowsSI=ch.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
     var kmRealArcor=arcorRowsSI.reduce(function(s,r){return s+r.kmsSimples;},0);
-    // Circuito completo Arcor = TODOS los tramos del cliente (SI y NO). Los tramos con
-    // carga=NO son posicionamientos REALES del informe y no deben reemplazarse por un
-    // tramo "generado" (tabla de referencia) si ya existen datos reales cargados.
-    var arcorRowsAll=ch.filter(function(r){return esArcor(r.cliente);});
     var trips=[],km100=0,kmArcorTotal=0;
-    if(arcorRowsAll.length>0){
-      var res=buildArcorTrips(arcorRowsAll,mesYear,mesNum);
+    if(arcorRowsSI.length>0){
+      var res=buildArcorTrips(arcorRowsSI,mesYear,mesNum);
       trips=res.trips;km100=res.km100;
       kmArcorTotal=trips.reduce(function(s,t){return s+t.km;},0);
     }
@@ -1213,10 +1209,7 @@ function buildResumenSheet(resumen,mesYear,mesNum){
 }
 
 function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
-  // byDateGroups: agrupa TODOS los tramos que caen en un mismo día (no descarta).
-  // Un chofer puede tener más de un tramo real el mismo día (ej: Rio Cuarto->Pergamino
-  // y Salto->Mendoza el mismo 23/6) — antes se perdía el segundo tramo silenciosamente.
-  var byDateGroups={};
+  var byDate={};
   trips.forEach(function(t){
     if(!t.dt)return;
     var assignDate=t.dt;
@@ -1228,32 +1221,19 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
       }
       assignDate=d2;
     }
+    // FIX: si ya hay un tramo asignado a ese día, ACUMULAR (no descartar).
+    // Antes se perdía el 2do tramo del mismo día (ej. Gianinetto 23/06, Infante 22/06),
+    // lo que hacía que la planilla individual sumara menos km100 que el Resumen KMs del Tab 1.
     var key=assignDate.toDateString();
-    if(!byDateGroups[key]) byDateGroups[key]=[];
-    byDateGroups[key].push(t);
-  });
-  // byDate: un "trip" consolidado por día — orig del primer tramo, dest del último,
-  // km = suma de todos los tramos de ese día (nada se pierde).
-  var byDate={};
-  Object.keys(byDateGroups).forEach(function(key){
-    var g=byDateGroups[key];
-    if(g.length===1){ byDate[key]=g[0]; return; }
-    byDate[key]={
-      dt:g[0].dt,
-      orig:g[0].orig,
-      dest:g[g.length-1].dest,
-      km:g.reduce(function(s,x){return s+(x.km||0);},0),
-      tipo:'combinado',
-      carga:g.some(function(x){return x.carga==='SI';})?'SI':'NO',
-      detalle:g.map(function(x){return x.orig+' \u2192 '+x.dest+' ('+x.km+'km)';}).join(' | ')
-    };
+    if(!byDate[key]) byDate[key]=[];
+    byDate[key].push(t);
   });
   var fechas=trips.filter(function(t){return t.dt;}).map(function(t){return t.dt;});
   if(!fechas.length)return XLSX.utils.aoa_to_sheet([]);
   var dtMin=new Date(mesYear,mesNum-1,1);
   var dtMax=new Date(Math.max.apply(null,fechas));
   var days=[],cur=new Date(dtMin);
-  while(cur<=dtMax){days.push({dt:new Date(cur),trip:byDate[cur.toDateString()]||null});cur.setDate(cur.getDate()+1);}
+  while(cur<=dtMax){days.push({dt:new Date(cur),trips:byDate[cur.toDateString()]||null});cur.setDate(cur.getDate()+1);}
   // Siempre generar exactamente 2 bloques de 16 días para un mes estándar
   // Bloque 1: días 1-16, Bloque 2: días 17-último del mes
   var chunks=[];
@@ -1261,7 +1241,7 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
   var allDays=[];
   for(var dd=1;dd<=diasMes;dd++){
     var ddt=new Date(mesYear,mesNum-1,dd);
-    allDays.push({dt:ddt,trip:byDate[ddt.toDateString()]||null});
+    allDays.push({dt:ddt,trips:byDate[ddt.toDateString()]||null});
   }
   // Bloque 1: días 1 a 16
   var b1=allDays.slice(0,16);
@@ -1302,7 +1282,7 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
     aoa.push(r6);curRow++;
     var dataStart=curRow;
     chunk.forEach(function(entry){
-      var dt=entry.dt,trip=entry.trip;
+      var dt=entry.dt,tripsDia=entry.trips;
       var dia=DIAS_ES[dt.getDay()];
       var finde=esFeriadoOFinde(dt);
       // En tipo A no hay km al 100% — no colorear finde en amarillo
@@ -1316,23 +1296,20 @@ function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
       });
       row[1]={v:dia,t:'s',s:{font:DAT,border:rowBrd(2),alignment:ACn,fill:rFill?{fgColor:{rgb:rFill}}:undefined}};
       row[2]={v:fmtDate(dt),t:'s',s:{font:DAT,border:rowBrd(3),alignment:ACn,fill:rFill?{fgColor:{rgb:rFill}}:undefined}};
-      // Tipo A: mostrar el trip en el día hábil correcto (desplazar finde → lunes)
-      var tripEfectivo = trip;
-      if(trip && typeof LIQ_TIPO !== 'undefined' && LIQ_TIPO==='A'){
-        // El trip se muestra en el día de la planilla (dt), no en su fecha original
-        // Si dt es finde, el trip ya fue "corrido" al siguiente hábil por la planilla
-        // (no hacemos nada aquí — el buildChoferSheet ya itera por días del mes)
-      }
-      if(trip){
-        row[3]={v:trip.orig,t:'s',s:{font:DAT,border:rowBrd(4),alignment:ACn}};
+      if(tripsDia && tripsDia.length){
+        // FIX: si hay más de un tramo el mismo día, se suman los km de TODOS
+        // (antes sólo se tomaba el primero y se perdían los demás).
+        var kmDia=tripsDia.reduce(function(s,t){return s+(t.km||0);},0);
+        var origPrimero=tripsDia[0].orig, destUltimo=tripsDia[tripsDia.length-1].dest;
+        row[3]={v:origPrimero,t:'s',s:{font:DAT,border:rowBrd(4),alignment:ACn}};
         row[4]={v:dia,t:'s',s:{font:DAT,border:rowBrd(5),alignment:ACn}};
         row[5]={v:fmtDate(dt),t:'s',s:{font:DAT,border:rowBrd(6),alignment:ACn}};
-        row[6]={v:trip.dest,t:'s',s:{font:DAT,border:rowBrd(7),alignment:ACn}};
-        if(trip.km&&trip.km>0)row[7]={v:+trip.km,t:'n',s:{font:DAT,border:rowBrd(8),alignment:ACn}};
+        row[6]={v:tripsDia.length>1?(destUltimo+' ('+tripsDia.length+' tramos)'):destUltimo,t:'s',s:{font:DAT,border:rowBrd(7),alignment:ACn}};
+        if(kmDia>0)row[7]={v:+kmDia,t:'n',s:{font:DAT,border:rowBrd(8),alignment:ACn}};
         // Km al 100%: solo para tipo ARCOR — tipo A no discrimina finde
         var esFinde100 = esFeriadoOFinde(dt) && !(typeof LIQ_TIPO!=='undefined'&&LIQ_TIPO==='A');
-        if(esFinde100 && trip.km>0)
-          row[13]={v:+trip.km,t:'n',s:{font:{name:'Calibri',sz:10,bold:true,color:{rgb:RC}},border:rowBrd(14),alignment:ACn}};
+        if(esFinde100 && kmDia>0)
+          row[13]={v:+kmDia,t:'n',s:{font:{name:'Calibri',sz:10,bold:true,color:{rgb:RC}},border:rowBrd(14),alignment:ACn}};
       }
       aoa.push(row);curRow++;
     });
@@ -1866,9 +1843,6 @@ function confirmarEscalas(){
     // Arcor planilla total (reutiliza lógica ya calculada si existe en resumen)
     var arcorSI=rows.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
     var kmArcorReal=arcorSI.reduce(function(s,r){return s+r.kmsSimples;},0);
-    // Circuito completo (SI + NO) para reconstruir la secuencia real de tramos —
-    // los tramos con carga=NO son posicionamientos reales del informe, no huecos.
-    var arcorAll=rows.filter(function(r){return esArcor(r.cliente);});
 
     // Usar datos del Tab 1 si ya fueron calculados (más precisos)
     var _resEntry = RESUMEN_KMS.filter(function(r){return r.chofer===chofer;})[0]||null;
@@ -1882,8 +1856,8 @@ function confirmarEscalas(){
     // Calcular trips Arcor (con posicionamiento) para obtener km total real y km100
     var resArcor={trips:[],km100:0};
     var trips=[];
-    if(arcorAll.length>0){
-      resArcor=buildArcorTrips(arcorAll,mesYearC,mesNumC);
+    if(arcorSI.length>0){
+      resArcor=buildArcorTrips(arcorSI,mesYearC,mesNumC);
       trips=resArcor.trips;
     }
 
@@ -1997,14 +1971,12 @@ function calcNeto(d){
   var descVal  = ESCALAS.descargas|| 42378.71;
   var cuota    = ESCALAS.cuotaAfil|| 20341.78;
 
-  // km100 solo aplica en tipo ARCOR. IMPORTANTE: d.km100 es un SUBCONJUNTO de d.km
-  // (los km de fin de semana/feriado ya están incluidos en el total, no son un
-  // adicional) — por eso hay que restarlo de kmNormal, no sumarlo de nuevo en kmTotal.
+  // km100 solo aplica en tipo ARCOR.
   // En tipo A: todos los km se liquidan como normales (item 060), sin 062.
   var esArcorLiq = (d.tipoLiq||'A')==='ARCOR';
-  var kmFinde   = esArcorLiq ? (d.km100||0) : 0;                          // A: sin 062
-  var kmNormal  = esArcorLiq ? Math.max(0, d.km-kmFinde) : (d.km+(d.km100||0)); // A: todos normales
-  var kmTotal   = esArcorLiq ? d.km : (kmNormal + kmFinde); // total real del mes (para viático), sin duplicar
+  var kmNormal  = esArcorLiq ? d.km              : (d.km+(d.km100||0)); // A: todos normales
+  var kmFinde   = esArcorLiq ? (d.km100||0)      : 0;                   // A: sin 062
+  var kmTotal   = kmNormal + kmFinde;      // total mes (para viático)
 
   // 001 Básico proporcional a días
   var cod001 = (basico/30)*d.dias;
@@ -2162,11 +2134,14 @@ function buildReciboHTML(d,c,fecha,tipo){
     +' de '+dtPago.getFullYear();
   var lugarPago='Río Cuarto, Cor., '+fmtPago;
 
-  // Km para mostrar en el recibo — SIEMPRE los mismos valores que calcNeto ya usó
-  // para calcular los $ (una sola fuente de verdad; antes se recalculaba acá con
-  // otra fórmula y las unidades mostradas no coincidían con los importes).
-  var kmNormal = c.kmNormal||0;
-  var kmFinde  = c.kmFinde||0;
+  // Km para la liquidación — en Arcor usar kmArcorTotal, en A usar kmA
+  var kmLiq = (LIQ_TIPO==='ARCOR') ? (d.kmArcorTotal||d.km||0) : (d.km||0);
+  // FIX: gatear explícitamente por tipo de liquidación (igual que calcNeto),
+  // en vez de confiar únicamente en que d.km100 ya llegue en 0 para tipo A.
+  var esArcorLiqRecibo = (d.tipoLiq||LIQ_TIPO||'A')==='ARCOR';
+  var kmFinde = esArcorLiqRecibo ? (d.km100||0) : 0;
+  var kmNormal = kmLiq - kmFinde;
+  if(kmNormal<0)kmNormal=0;
 
   // Construir filas de conceptos (solo mostrar si >0)
   function conceptoRow(cod,desc,uni,suj,exe,desc_val){
