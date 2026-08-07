@@ -299,6 +299,11 @@ textarea.paste-area:focus{outline:none;border-color:var(--rojo)}
             <div class="dz-s">Arrastr&#225; o hac&#233; clic</div>
             <div class="dz-ok" id="ok-t"></div>
           </div>
+          <div style="margin-top:10px;background:var(--gris);border-radius:var(--r);padding:14px">
+            <span class="lbl" style="margin-bottom:6px;display:block">Período a liquidar (cierre día 25)</span>
+            <input type="date" id="inp-periodo-hasta" onchange="onPeriodoHastaChange()" style="width:100%;padding:7px 10px;border:1.5px solid var(--borde);border-radius:6px">
+            <span style="font-size:11px;color:var(--muted);display:block;margin-top:6px">El período va del 26 del mes anterior al 25 seleccionado. El archivo puede traer tramos anteriores (se usan sólo para ubicar el origen, no se liquidan).</span>
+          </div>
         </div>
         <div>
           <span class="lbl">Feriados del mes</span>
@@ -884,6 +889,17 @@ var DIAS_ES=['domingo','lunes','martes','miercoles','jueves','viernes','sabado']
 var DATA_ROWS=16;
 var tramosData=null, resultWB=null;
 var VARS_PARSED=[];
+var PERIODO_HASTA=null; // Date — día 25 de cierre elegido en Tab 1 (null = inferir por mayoría, comportamiento legacy)
+function onPeriodoHastaChange(){
+  var v=document.getElementById('inp-periodo-hasta').value;
+  PERIODO_HASTA=v?parseDate(v.split('-').reverse().join('/')):null;
+}
+// Ventana de liquidación: 26 del mes anterior al 25 de "hasta" (inclusive)
+function getPeriodoWindow(hasta){
+  var desde=new Date(hasta.getFullYear(),hasta.getMonth()-1,26,0,0,0);
+  var fin=new Date(hasta.getFullYear(),hasta.getMonth(),25,23,59,59);
+  return {desde:desde,hasta:fin};
+}
 var ESCALAS={basico:1017089.13, km:81.36888, descargas:42378.71, cuotaAfil:20341.78}; // se actualiza desde el Sheet
 
 function loadTramos(file){
@@ -1066,27 +1082,42 @@ function buildWorkbook(){
   var choferes=[];
   tramosData.forEach(function(r){if(choferes.indexOf(r.chofer)<0&&r.chofer)choferes.push(r.chofer);});
   choferes.sort();
-  var mesCnt={};
-  tramosData.forEach(function(r){var dt=parseDate(r.fechaIn);if(dt){var k=dt.getFullYear()+'-'+(dt.getMonth()+1);mesCnt[k]=(mesCnt[k]||0)+1;}});
-  var mesKey=Object.keys(mesCnt).sort(function(a,b){return mesCnt[b]-mesCnt[a];})[0]||'2026-6';
-  var mp=mesKey.split('-'),mesYear=+mp[0],mesNum=+mp[1];
+  var mesYear,mesNum,win;
+  if(PERIODO_HASTA){
+    win=getPeriodoWindow(PERIODO_HASTA);
+    mesYear=PERIODO_HASTA.getFullYear();mesNum=PERIODO_HASTA.getMonth()+1;
+  } else {
+    // Legacy: inferir mes por mayoría si no se eligió período explícito
+    var mesCnt={};
+    tramosData.forEach(function(r){var dt=parseDate(r.fechaIn);if(dt){var k=dt.getFullYear()+'-'+(dt.getMonth()+1);mesCnt[k]=(mesCnt[k]||0)+1;}});
+    var mesKey=Object.keys(mesCnt).sort(function(a,b){return mesCnt[b]-mesCnt[a];})[0]||'2026-6';
+    var mp=mesKey.split('-');mesYear=+mp[0];mesNum=+mp[1];
+    win=getPeriodoWindow(new Date(mesYear,mesNum-1,25));
+  }
   setP(20,'run','Calculando...');
   var resumen=[],arcorSheets=[];
   choferes.forEach(function(chofer){
-    var ch=tramosData.filter(function(r){return r.chofer===chofer;});
-    // KMs reales = TODOS
+    var chTodo=tramosData.filter(function(r){return r.chofer===chofer;});
+    // Sólo tramos DENTRO del período 26–25 cuentan para la liquidación
+    var ch=chTodo.filter(function(r){var dt=parseDate(r.fechaIn);return dt&&dt>=win.desde&&dt<=win.hasta;});
+    // KMs reales = TODOS los del período
     var kmReal=ch.reduce(function(s,r){return s+r.kmsSimples;},0);
     var kmCargados=ch.filter(function(r){return r.carga==='SI';}).reduce(function(s,r){return s+r.kmsSimples;},0);
     var kmVacios=ch.filter(function(r){return r.carga==='NO';}).reduce(function(s,r){return s+r.kmsSimples;},0);
     var kmA=Math.min(Math.round(kmReal*0.60),7000);
     var kmB=Math.round(kmReal-kmA);
     var patente=(ch.find(function(r){return r.patente;})||{patente:''}).patente;
-    // KMs Arcor reales (solo CARGA=SI y cliente Arcor)
+    // KMs Arcor reales (solo CARGA=SI y cliente Arcor) dentro del período
     var arcorRowsSI=ch.filter(function(r){return r.carga==='SI'&&esArcor(r.cliente);});
     var kmRealArcor=arcorRowsSI.reduce(function(s,r){return s+r.kmsSimples;},0);
+    // Origen real: destino del último tramo (cualquier cliente) ANTERIOR al período,
+    // usado para no arrancar siempre desde RIO CUARTO
+    var previos=chTodo.filter(function(r){var dt=parseDate(r.fechaIn);return dt&&dt<win.desde;});
+    previos.sort(function(a,b){return parseDate(a.fechaIn)-parseDate(b.fechaIn);});
+    var origenAnterior=previos.length?normLoc(previos[previos.length-1].llegaA):null;
     var trips=[],km100=0,kmArcorTotal=0;
     if(arcorRowsSI.length>0){
-      var res=buildArcorTrips(arcorRowsSI,mesYear,mesNum);
+      var res=buildArcorTrips(arcorRowsSI,mesYear,mesNum,origenAnterior);
       trips=res.trips;km100=res.km100;
       kmArcorTotal=trips.reduce(function(s,t){return s+t.km;},0);
     }
@@ -1111,17 +1142,23 @@ function buildWorkbook(){
   return wb;
 }
 
-function buildArcorTrips(arcorRows,mesYear,mesNum){
+function buildArcorTrips(arcorRows,mesYear,mesNum,origenAnterior){
   var trips=arcorRows.map(function(r){
     return {dt:parseDate(r.fechaIn),dtFin:parseDate(r.fechaFin),orig:normLoc(r.saleDE),dest:normLoc(r.llegaA),km:r.kmsSimples,tipo:'real',carga:'SI'};
   }).filter(function(t){return t.dt;});
   trips.sort(function(a,b){return a.dt-b.dt;});
   trips.forEach(function(t){if((!t.km||t.km===0)&&t.orig&&t.dest){var k=getKm(t.orig,t.dest);if(k)t.km=k;}});
   if(!trips.length)return {trips:[],km100:0};
-  if(normLoc(trips[0].orig)!=='RIO CUARTO'){
-    var kIni=getKm('RIO CUARTO',trips[0].orig)||0;
-    var dtIni=new Date(trips[0].dt);dtIni.setDate(dtIni.getDate()-1);
-    trips.unshift({dt:dtIni,orig:'RIO CUARTO',dest:trips[0].orig,km:kIni,tipo:'generado',carga:'NO'});
+  // Origen real: si tenemos el destino del último tramo del período anterior, se usa ese.
+  // Si no hay dato previo (ej. chofer nuevo / sin historial), se cae a RIO CUARTO.
+  var origenReal=origenAnterior||'RIO CUARTO';
+  if(normLoc(trips[0].orig)!==normLoc(origenReal)){
+    var kIni=getKm(origenReal,trips[0].orig)||0;
+    // El tramo de conexión falta porque viene de una orden de servicio sin trayecto de inicio:
+    // se genera con la MISMA fecha que el primer tramo real (no día-1), pudiendo así
+    // coexistir 2 tramos el mismo día — sólo pasa al inicio del período.
+    var dtIni=new Date(trips[0].dt);
+    trips.unshift({dt:dtIni,orig:origenReal,dest:trips[0].orig,km:kIni,tipo:'generado',carga:'NO'});
   }
   var i=0;
   while(i<trips.length-1){
@@ -1836,7 +1873,22 @@ function confirmarEscalas(){
   LIQ_DATA=[];
 
   choferes.forEach(function(chofer){
-    var rows=tramosData.filter(function(r){return r.chofer===chofer;});
+    var rowsTodo=tramosData.filter(function(r){return r.chofer===chofer;});
+
+    // Detectar período: usa PERIODO_HASTA si fue elegido en Tab1, si no infiere por mayoría (legacy)
+    var mesYearC,mesNumC,winC;
+    if(PERIODO_HASTA){
+      winC=getPeriodoWindow(PERIODO_HASTA);
+      mesYearC=PERIODO_HASTA.getFullYear();mesNumC=PERIODO_HASTA.getMonth()+1;
+    } else {
+      var mesCnt={};
+      rowsTodo.forEach(function(r){var dt=parseDate(r.fechaIn);if(dt){var k=dt.getFullYear()+'-'+(dt.getMonth()+1);mesCnt[k]=(mesCnt[k]||0)+1;}});
+      var mesKey=Object.keys(mesCnt).sort(function(a,b){return mesCnt[b]-mesCnt[a];})[0]||'2026-6';
+      var mp=mesKey.split('-');mesYearC=+mp[0];mesNumC=+mp[1];
+      winC=getPeriodoWindow(new Date(mesYearC,mesNumC-1,25));
+    }
+    // Sólo tramos DENTRO del período cuentan para la liquidación
+    var rows=rowsTodo.filter(function(r){var dt=parseDate(r.fechaIn);return dt&&dt>=winC.desde&&dt<=winC.hasta;});
     var kmReal=rows.reduce(function(s,r){return s+r.kmsSimples;},0);
     var kmA=Math.min(Math.round(kmReal*0.60),7000);
     var kmB=Math.round(kmReal-kmA);
@@ -1847,17 +1899,16 @@ function confirmarEscalas(){
     // Usar datos del Tab 1 si ya fueron calculados (más precisos)
     var _resEntry = RESUMEN_KMS.filter(function(r){return r.chofer===chofer;})[0]||null;
 
-    // Detectar mes del período
-    var mesCnt={};
-    rows.forEach(function(r){var dt=parseDate(r.fechaIn);if(dt){var k=dt.getFullYear()+'-'+(dt.getMonth()+1);mesCnt[k]=(mesCnt[k]||0)+1;}});
-    var mesKey=Object.keys(mesCnt).sort(function(a,b){return mesCnt[b]-mesCnt[a];})[0]||'2026-6';
-    var mp=mesKey.split('-'),mesYearC=+mp[0],mesNumC=+mp[1];
+    // Origen real: destino del último tramo anterior al período (igual que en Tab 1)
+    var previosC=rowsTodo.filter(function(r){var dt=parseDate(r.fechaIn);return dt&&dt<winC.desde;});
+    previosC.sort(function(a,b){return parseDate(a.fechaIn)-parseDate(b.fechaIn);});
+    var origenAnteriorC=previosC.length?normLoc(previosC[previosC.length-1].llegaA):null;
 
     // Calcular trips Arcor (con posicionamiento) para obtener km total real y km100
     var resArcor={trips:[],km100:0};
     var trips=[];
     if(arcorSI.length>0){
-      resArcor=buildArcorTrips(arcorSI,mesYearC,mesNumC);
+      resArcor=buildArcorTrips(arcorSI,mesYearC,mesNumC,origenAnteriorC);
       trips=resArcor.trips;
     }
 
