@@ -793,21 +793,25 @@ function buildWorkbook(){
     var patente=(ch.find(function(r){ return r.patente; })||{patente:''}).patente;
     var arcorRowsSI=ch.filter(function(r){ return r.carga==='SI'&&esArcor(r.cliente); });
     var kmRealArcor=arcorRowsSI.reduce(function(s,r){ return s+r.kmsSimples; },0);
-    var trips=[], km100=0, kmArcorTotal=0;
+    var trips=[], km100=0, kmArcorTotal=0, diasInfo=null;
     if(arcorRowsSI.length>0){
       var res=buildArcorTrips(arcorRowsSI,mesYear,mesNum);
-      trips=res.trips; km100=res.km100;
-      kmArcorTotal=trips.reduce(function(s,t){ return s+t.km; },0);
+      trips=res.trips;
+      // Columnas H e I del Resumen: se derivan del MISMO agrupamiento por día
+      // que arma la planilla individual, para que I coincida siempre con H52.
+      diasInfo=agruparTripsPorDia(trips,mesYear,mesNum);
+      km100=diasInfo.km100;
+      kmArcorTotal=diasInfo.kmTotalPlanilla;
     }
-    resumen.push({chofer:chofer,kmReal:Math.round(kmReal),kmCargados:Math.round(kmCargados),kmVacios:Math.round(kmVacios),kmA:kmA,kmB:kmB,kmRealArcor:Math.round(kmRealArcor),km100:km100,kmArcorTotal:Math.round(kmArcorTotal),patente:patente});
-    if(trips.length>0) arcorSheets.push({chofer:chofer,patente:patente,trips:trips,mesYear:mesYear,mesNum:mesNum});
+    resumen.push({chofer:chofer,kmReal:Math.round(kmReal),kmCargados:Math.round(kmCargados),kmVacios:Math.round(kmVacios),kmA:kmA,kmB:kmB,kmRealArcor:Math.round(kmRealArcor),km100:Math.round(km100),kmArcorTotal:Math.round(kmArcorTotal),patente:patente});
+    if(trips.length>0) arcorSheets.push({chofer:chofer,patente:patente,trips:trips,mesYear:mesYear,mesNum:mesNum,diasInfo:diasInfo});
   });
   setP(55,'Armando hoja Resumen...');
   var wsRes=buildResumenSheet(resumen,mesYear,mesNum);
   wb.SheetNames.push('Resumen KMs'); wb.Sheets['Resumen KMs']=wsRes;
   setP(70,'Armando planillas por chofer...');
   arcorSheets.forEach(function(d){
-    var ws=buildChoferSheet(d.chofer,d.patente,d.trips,d.mesYear,d.mesNum);
+    var ws=buildChoferSheet(d.chofer,d.patente,d.trips,d.mesYear,d.mesNum,d.diasInfo);
     var name=d.chofer.substring(0,31);
     wb.SheetNames.push(name); wb.Sheets[name]=ws;
   });
@@ -854,9 +858,47 @@ function buildArcorTrips(arcorRows,mesYear,mesNum){
     var dtV=new Date(dtFin); dtV.setDate(dtV.getDate()+1);
     trips.push({dt:dtV,orig:ult.dest,dest:'RIO CUARTO',km:kV,tipo:'generado_retorno',carga:'NO'});
   }
-  // KMs al 100% = todos los km (reales y generados) cuyo día es sábado/domingo/feriado
-  var km100=trips.filter(function(t){ return t.dt&&esFeriadoOFinde(t.dt)&&t.km>0; }).reduce(function(s,t){ return s+t.km; },0);
-  return {trips:trips,km100:km100};
+  return {trips:trips};
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// FUENTE ÚNICA DE VERDAD para columnas H/I del Resumen y para la planilla
+// individual: agrupa los tramos por fecha calendario del mes. Si dos
+// tramos caen el mismo día, se AGRUPAN sumando sus KMs (nunca se
+// descarta ninguno — antes buildChoferSheet solo tomaba el primero).
+// kmTotalPlanilla = exactamente lo que va a sumar la celda H52.
+// km100 = exactamente los KMs de esos mismos días que caen en
+// sábado/domingo/feriado. Resumen y planilla comparten este resultado,
+// así la columna I del Resumen SIEMPRE coincide con H52 de la planilla.
+// ─────────────────────────────────────────────────────────────────────
+function agruparTripsPorDia(trips,mesYear,mesNum){
+  var porDia={};
+  trips.forEach(function(t){
+    if(!t.dt) return;
+    var key=t.dt.toDateString();
+    if(!porDia[key]) porDia[key]=[];
+    porDia[key].push(t);
+  });
+  var diasMes=new Date(mesYear,mesNum,0).getDate();
+  var allDays=[], kmTotalPlanilla=0, km100=0;
+  for(var dd=1;dd<=diasMes;dd++){
+    var ddt=new Date(mesYear,mesNum-1,dd);
+    var lista=porDia[ddt.toDateString()]||[];
+    var tripDia=null;
+    if(lista.length===1){
+      tripDia=lista[0];
+    }else if(lista.length>1){
+      // Varios tramos el mismo día: se agrupan (orig=primero, dest=último, km=suma) — no se pierde ningún KM
+      var kmSum=lista.reduce(function(s,t){ return s+(t.km||0); },0);
+      tripDia={dt:ddt,orig:lista[0].orig,dest:lista[lista.length-1].dest,km:kmSum,tipo:'agrupado',carga:'SI'};
+    }
+    allDays.push({dt:ddt,trip:tripDia});
+    if(tripDia&&tripDia.km>0){
+      kmTotalPlanilla+=tripDia.km;
+      if(esFeriadoOFinde(ddt)) km100+=tripDia.km;
+    }
+  }
+  return {allDays:allDays,kmTotalPlanilla:kmTotalPlanilla,km100:km100};
 }
 </script>
 <script>
@@ -918,18 +960,11 @@ function buildResumenSheet(resumen,mesYear,mesNum){
 
 // Planilla individual de KMs por chofer (formato Convención Colectiva).
 // Genera SIEMPRE el mes completo en 2 bloques de 16 filas; H52 = total acumulado.
-function buildChoferSheet(chofer,plate,trips,mesYear,mesNum){
-  var byDate={};
-  trips.forEach(function(t){
-    if(!t.dt) return;
-    if(!byDate[t.dt.toDateString()]) byDate[t.dt.toDateString()]=t;
-  });
-  var diasMes=new Date(mesYear,mesNum,0).getDate();
-  var allDays=[];
-  for(var dd=1;dd<=diasMes;dd++){
-    var ddt=new Date(mesYear,mesNum-1,dd);
-    allDays.push({dt:ddt,trip:byDate[ddt.toDateString()]||null});
-  }
+function buildChoferSheet(chofer,plate,trips,mesYear,mesNum,diasInfo){
+  // Usa el mismo agrupamiento por día que alimenta las columnas H/I del
+  // Resumen (agruparTripsPorDia) — nunca descarta tramos que caen el mismo día.
+  if(!diasInfo) diasInfo=agruparTripsPorDia(trips,mesYear,mesNum);
+  var allDays=diasInfo.allDays;
   var chunks=[];
   var b1=allDays.slice(0,16);
   while(b1.length<DATA_ROWS){ var ld=b1[b1.length-1].dt; var nd=new Date(ld); nd.setDate(nd.getDate()+1); b1.push({dt:nd,trip:null}); }
