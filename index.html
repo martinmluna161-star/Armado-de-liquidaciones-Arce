@@ -253,8 +253,10 @@ tr:nth-child(even) td{background:#fafbfc}
   <div class="card" id="card-resultados" style="display:none">
     <h3>Resumen General de KMs</h3>
     <div class="chips" id="chips-resultado"></div>
-    <div style="margin-top:10px">
-      <button class="verde" onclick="downloadKms()">⬇ Descargar Resumen + Planillas Arcor (.xlsx)</button>
+    <div class="row" style="margin-top:10px">
+      <button class="verde" onclick="downloadKms()">⬇ Descargar todo (Resumen + Arcor + KMs A)</button>
+      <button class="sec" id="btn-dl-arcor" style="display:none" onclick="downloadArcor()">⬇ Solo Planillas Arcor</button>
+      <button class="sec" id="btn-dl-kmsa" style="display:none" onclick="downloadKmsA()">⬇ Solo Planillas KMs A</button>
     </div>
   </div>
 </div>
@@ -929,8 +931,11 @@ function buildWorkbook(){
     totalKmReal:resumen.reduce(function(s,r){ return s+r.kmReal; },0),
     totalKm100:resumen.reduce(function(s,r){ return s+r.km100; },0),
     totalArcor:resumen.reduce(function(s,r){ return s+r.kmArcorTotal; },0),
+    totalKmsA:resumen.reduce(function(s,r){ return s+(r.kmsATotal||0); },0),
     mes:mesNum+'/'+mesYear,
-    periodo:fmtDate(periodStart)+' al '+fmtDate(periodEnd)
+    periodo:fmtDate(periodStart)+' al '+fmtDate(periodEnd),
+    arcorSheetNames:arcorSheets.map(function(d){ return d.sheetName; }),
+    kmsASheetNames:kmsASheets.map(function(d){ return d.sheetName; })
   };
   RESUMEN_KMS=resumen;
   return wb;
@@ -1294,9 +1299,12 @@ function showResults(meta){
     chip(meta.conKmsA,'Con planilla KMs A'),
     chip(meta.totalKmReal.toLocaleString('es-AR'),'KMs reales totales'),
     chip(meta.totalArcor.toLocaleString('es-AR'),'KMs planilla Arcor'),
+    chip((meta.totalKmsA||0).toLocaleString('es-AR'),'KMs planilla KMs A'),
     chip(meta.totalKm100.toLocaleString('es-AR'),'KMs al 100%','acc'),
     chip(meta.periodo||meta.mes,'Período (26 al 25)')
   ].join('');
+  document.getElementById('btn-dl-arcor').style.display=meta.conArcor>0?'':'none';
+  document.getElementById('btn-dl-kmsa').style.display=meta.conKmsA>0?'':'none';
   document.getElementById('card-resultados').scrollIntoView({behavior:'smooth'});
   // Habilita el selector de choferes de la pestaña de Liquidación
   populateEmpleados(RESUMEN_KMS.map(function(r){ return r.chofer; }));
@@ -1308,6 +1316,21 @@ function downloadKms(){
   XLSX.writeFile(resultWB,'Resumen_Planillas_Arce_'+today()+'.xlsx');
   toast('Descargado','s');
 }
+
+// Descarga un workbook nuevo con solo Resumen + el subconjunto de hojas
+// indicado (Arcor o KMs A), a partir de las hojas ya generadas en resultWB.
+function descargarSubset(nombres,sufijo){
+  if(!resultWB||!nombres||!nombres.length){ toast('No hay planillas de ese tipo para descargar','w'); return; }
+  var wb2={SheetNames:[],Sheets:{}};
+  if(resultWB.Sheets['Resumen KMs']){ wb2.SheetNames.push('Resumen KMs'); wb2.Sheets['Resumen KMs']=resultWB.Sheets['Resumen KMs']; }
+  nombres.forEach(function(n){
+    if(resultWB.Sheets[n]){ wb2.SheetNames.push(n); wb2.Sheets[n]=resultWB.Sheets[n]; }
+  });
+  XLSX.writeFile(wb2,sufijo+'_Arce_'+today()+'.xlsx');
+  toast('Descargado','s');
+}
+function downloadArcor(){ descargarSubset((resultWB._meta&&resultWB._meta.arcorSheetNames)||[],'Planillas_Arcor'); }
+function downloadKmsA(){ descargarSubset((resultWB._meta&&resultWB._meta.kmsASheetNames)||[],'Planillas_KMsA'); }
 </script>
 <script>
 // ═══════════════════════════════════════════════════════════════════════
